@@ -1,295 +1,323 @@
 "use client";
+// File: src/app/victim/page.js
+// เวอร์ชัน: Full Screen Fluid (เต็มจอ 100%) + แผนที่ปักหมุด (Map Pinning)
+// รวมดีไซน์ล่าสุดเข้ากับฟังก์ชันแผนที่
 
-// File: src/app/victim/page.jsx
-// Location: หน้าแจ้งเหตุผู้ประสบภัย (Real Implementation - ต่อ DB และ AI จริง)
+import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic'; // จำเป็นสำหรับ Map
+import { db } from '../../lib/db'; 
+import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import Link from 'next/link';
+import { ChevronLeft, MapPin, Crosshair, AlertTriangle, Send, Menu } from 'lucide-react';
 
-import React, { useState, useEffect } from 'react';
-import { Camera, MapPin, Phone, AlertTriangle, Send, CheckCircle, Clock, Navigation, Loader2 } from 'lucide-react';
+// Import Map แบบ Dynamic (เพื่อแก้ปัญหา Server-side Rendering)
+const MapContainer = dynamic(() => import('../../components/map/MapContainer'), { 
+  ssr: false, 
+  loading: () => <div className="w-full h-[400px] bg-slate-100 animate-pulse flex items-center justify-center text-slate-400">กำลังโหลดแผนที่...</div>
+});
 
-// Import Firebase
-import { db, storage } from '../../lib/firebase/config';
-import { collection, addDoc, serverTimestamp, doc, onSnapshot } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-
-// Import AI Service
-import { analyzeDisasterImage } from '../../lib/aiService';
-
-const VictimPage = () => {
-  // --- State Management ---
-  const [step, setStep] = useState(1); // 1=Form, 2=Tracking
-  const [loading, setLoading] = useState(false);
-  const [statusText, setStatusText] = useState("");
+export default function VictimReportPage() {
+  const [disasterType, setDisasterType] = useState('น้ำท่วม (Flood)'); 
+  const [description, setDescription] = useState('');
   
-  // Form Data
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [location, setLocation] = useState(null);
-  const [phone, setPhone] = useState("");
-  const [details, setDetails] = useState("");
-  const [aiResult, setAiResult] = useState(null);
+  // State สำหรับพิกัด (เก็บแยกเพื่อให้ส่งเข้า Map ได้)
+  const [lat, setLat] = useState(null);
+  const [lng, setLng] = useState(null);
+  const [locationString, setLocationString] = useState(''); // สำหรับโชว์ใน Input Box
 
-  // Tracking Data
-  const [currentCaseId, setCurrentCaseId] = useState(null);
-  const [caseStatus, setCaseStatus] = useState("pending");
+  const [contactName, setContactName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [user, setUser] = useState(null);
 
-  // --- Logic 1: จัดการรูปภาพ & AI ---
-  const handleImageChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
-
-    setStatusText("AI กำลังวิเคราะห์ภาพ...");
-    setLoading(true); // โชว์ Loading ตอน AI คิด
-    try {
-      const result = await analyzeDisasterImage(file);
-      setAiResult(result);
-      
-      if (!details) {
-        setDetails(`เหตุการณ์: ${result.label} (ความมั่นใจ ${result.confidence}%)`);
+  // 1. Auto Login
+  useEffect(() => {
+    if (!db) return;
+    const auth = getAuth(db.app);
+    const initAuth = async () => {
+      try {
+        await signInAnonymously(auth);
+      } catch (error) {
+        console.error("Login Error:", error);
       }
-    } catch (error) {
-      console.error("AI Error:", error);
-    } finally {
-      setLoading(false);
-      setStatusText("");
-    }
+    };
+    initAuth();
+    onAuthStateChanged(auth, (u) => {
+      if (u) setUser(u);
+    });
+  }, []);
+
+  // ฟังก์ชัน: เมื่อเลือกจุดบนแผนที่
+  const handleMapSelect = (newLat, newLng) => {
+    setLat(newLat);
+    setLng(newLng);
+    setLocationString(`${newLat.toFixed(6)}, ${newLng.toFixed(6)}`);
   };
 
-  // --- Logic 2: ดึง GPS จริง ---
+  // ฟังก์ชัน: ดึงพิกัด GPS
   const handleGetLocation = () => {
-    setLoading(true);
-    setStatusText("กำลังค้นหาพิกัด GPS...");
-    
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-          setLoading(false);
-          setStatusText("");
-        },
-        (error) => {
-          console.error("GPS Error:", error);
-          setLoading(false);
-          alert("ไม่สามารถดึงพิกัดได้: กรุณาเปิด GPS หรืออนุญาตการเข้าถึง");
-        },
-        { enableHighAccuracy: true }
-      );
-    } else {
-      setLoading(false);
-      alert("Browser ไม่รองรับ GPS");
+    if (!navigator.geolocation) {
+      alert("เบราว์เซอร์ของคุณไม่รองรับการระบุตำแหน่ง");
+      return;
     }
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+        
+        // อัปเดตทั้ง Map และ Input Box
+        setLat(latitude);
+        setLng(longitude);
+        setLocationString(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        console.error("Geolocation Error:", error);
+        alert("ไม่สามารถดึงพิกัดได้ กรุณาระบุเองหรือจิ้มบนแผนที่");
+        setIsGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
-  // --- Logic 3: ส่งข้อมูลเข้า Firebase ---
+  // 2. Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!imageFile || !location || !phone) {
-      alert("กรุณาถ่ายรูป, ระบุพิกัด และใส่เบอร์โทรให้ครบถ้วน");
+    if (!user) {
+      alert("⚠️ กำลังเชื่อมต่อระบบ... กรุณารอสักครู่");
+      return;
+    }
+    if (!description) {
+      alert("⚠️ กรุณากรอกรายละเอียด");
+      return;
+    }
+    if (!locationString) {
+      alert("⚠️ กรุณาระบุพิกัด (กดปุ่มดึงพิกัด หรือจิ้มบนแผนที่)");
       return;
     }
 
-    const confirm = window.confirm("ยืนยันการส่งขอความช่วยเหลือ?");
-    if (!confirm) return;
-
-    setLoading(true);
-    setStatusText("กำลังอัปโหลดข้อมูล...");
+    setIsSubmitting(true);
 
     try {
-      // 1. Upload Image
-      const filename = `reports/${Date.now()}_${imageFile.name}`;
-      const storageRef = ref(storage, filename);
-      const snapshot = await uploadBytes(storageRef, imageFile);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      const reportData = {
+        userId: user.uid,
+        disasterType,
+        description,
+        location: locationString, // ส่ง string ที่โชว์ใน box
+        latitude: lat,            // ส่งแยก field ไปด้วยเผื่อใช้ทำแผนที่รวม
+        longitude: lng,
+        contactName,
+        status: 'pending',
+        timestamp: serverTimestamp(),
+        hasImage: false,
+        aiAnalysis: { label: "Text Only", confidence: 100 }
+      };
 
-      // 2. Save Data
-      const docRef = await addDoc(collection(db, "reports"), {
-        phone: phone,
-        details: details,
-        location: location,
-        imageUrl: downloadURL,
-        aiAnalysis: aiResult || { label: "N/A" },
-        status: "pending",
-        createdAt: serverTimestamp(),
-      });
+      await addDoc(collection(db, "reports"), reportData);
 
-      // 3. Save ID & Move Next
-      localStorage.setItem("current_case_id", docRef.id);
-      setCurrentCaseId(docRef.id);
-      setStep(2);
-      window.scrollTo(0, 0);
+      alert("✅ ส่งข้อมูลขอความช่วยเหลือสำเร็จ!");
+      
+      // Reset Form
+      setDescription('');
+      setLocationString('');
+      setLat(null);
+      setLng(null);
+      setContactName('');
+      setDisasterType('น้ำท่วม (Flood)');
 
     } catch (error) {
-      console.error("Submit Error:", error);
-      alert("เกิดข้อผิดพลาด: " + error.message);
+      console.error("Submission Error:", error);
+      alert("❌ เกิดข้อผิดพลาด: " + error.message);
     } finally {
-      setLoading(false);
-      setStatusText("");
+      setIsSubmitting(false);
     }
   };
 
-  // --- Logic 4: Real-time Tracking ---
-  useEffect(() => {
-    if (step === 2 && currentCaseId) {
-      const caseRef = doc(db, "reports", currentCaseId);
-      const unsubscribe = onSnapshot(caseRef, (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setCaseStatus(data.status);
-        }
-      });
-      return () => unsubscribe();
-    }
-  }, [step, currentCaseId]);
-
-  // ================= UI SECTION =================
-
-  if (step === 2) {
-    // หน้าติดตามสถานะ (เหมือนเดิม)
-    return (
-      <div className="min-h-screen bg-gray-50 font-sans pb-10">
-        <header className="bg-white p-4 shadow-sm sticky top-0 z-50 flex items-center justify-between">
-          <h1 className="text-lg font-bold text-gray-800">สถานะความช่วยเหลือ</h1>
-          <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse">
-            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-            Real-time
-          </div>
-        </header>
-
-        <main className="p-4 space-y-4 max-w-md mx-auto">
-          <div className={`bg-white rounded-2xl p-6 shadow-md border-l-4 transition-colors duration-500 ${caseStatus === 'pending' ? 'border-gray-400' : 'border-blue-500'}`}>
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">
-                  {caseStatus === 'pending' && "รอรับเรื่อง"}
-                  {caseStatus === 'assigned' && "กำลังเดินทาง"}
-                  {caseStatus === 'on_scene' && "ถึงจุดเกิดเหตุ"}
-                  {caseStatus === 'resolved' && "ช่วยเหลือสำเร็จ"}
-                </h2>
-                <p className="text-sm text-gray-500 mt-1">Case ID: #{currentCaseId?.slice(0, 6)}</p>
-              </div>
-              <div className="bg-blue-50 p-3 rounded-full">
-                {caseStatus === 'assigned' ? <Navigation className="w-6 h-6 text-blue-600 animate-bounce" /> : <Clock className="w-6 h-6 text-gray-400" />}
-              </div>
-            </div>
-
-            <div className="space-y-8 relative pl-2 border-l-2 border-gray-100 ml-2">
-              <div className="relative pl-6">
-                <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 ${['pending', 'assigned', 'on_scene', 'resolved'].includes(caseStatus) ? 'bg-green-500 border-green-500' : 'bg-white border-gray-300'}`}></div>
-                <h3 className="font-bold text-gray-800">ส่งข้อมูลเข้าระบบ</h3>
-                <p className="text-xs text-gray-500">ข้อมูลของท่านถูกส่งถึงศูนย์สั่งการแล้ว</p>
-              </div>
-              <div className="relative pl-6">
-                <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 ${['assigned', 'on_scene', 'resolved'].includes(caseStatus) ? 'bg-blue-500 border-blue-500' : 'bg-white border-gray-300'}`}></div>
-                <h3 className={`font-bold ${['assigned', 'on_scene', 'resolved'].includes(caseStatus) ? 'text-blue-600' : 'text-gray-400'}`}>เจ้าหน้าที่รับเรื่องแล้ว</h3>
-              </div>
-              <div className="relative pl-6">
-                <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 ${['on_scene', 'resolved'].includes(caseStatus) ? 'bg-orange-500 border-orange-500' : 'bg-white border-gray-300'}`}></div>
-                <h3 className={`font-bold ${['on_scene', 'resolved'].includes(caseStatus) ? 'text-orange-600' : 'text-gray-400'}`}>ถึงจุดเกิดเหตุ</h3>
-              </div>
-            </div>
-          </div>
-          <button onClick={() => window.location.href = '/'} className="w-full py-4 text-gray-500 text-sm underline hover:text-gray-800">กลับหน้าหลัก</button>
-        </main>
-      </div>
-    );
-  }
-
-  // หน้าฟอร์ม (Step 1)
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 font-sans">
-      {/* Loading Overlay */}
-      {loading && (
-        <div className="fixed inset-0 bg-black/70 z-[60] flex flex-col items-center justify-center text-white">
-          <Loader2 className="w-12 h-12 animate-spin mb-4" />
-          <p className="text-lg font-medium">{statusText}</p>
-        </div>
-      )}
-
-      <header className="bg-red-600 text-white p-6 rounded-b-3xl shadow-lg sticky top-0 z-50">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="bg-white/20 p-2 rounded-full">
-            <AlertTriangle className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold">แจ้งเหตุฉุกเฉิน</h1>
-            <p className="text-red-100 text-xs">ระบุพิกัดและส่งภาพถ่ายเพื่อขอความช่วยเหลือ</p>
-          </div>
-        </div>
-      </header>
-
-      <main className="p-4 -mt-4 relative z-10 max-w-md mx-auto">
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-5 space-y-6">
-          {/* Upload Photo */}
-          <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
-              <span className="bg-red-100 text-red-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
-              ถ่ายรูปสถานการณ์จริง *
-            </label>
-            <div className="relative group">
-              <input type="file" accept="image/*" onChange={handleImageChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-              <div className={`border-2 border-dashed rounded-xl h-56 flex flex-col items-center justify-center transition-all duration-300 ${imagePreview ? 'border-red-500 bg-gray-50' : 'border-gray-300 bg-gray-50'}`}>
-                {imagePreview ? (
-                  <div className="relative w-full h-full p-2">
-                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-lg shadow-sm" />
-                    {aiResult && (
-                      <div className="absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur-sm p-2 rounded-lg text-white text-xs">
-                        <p className="font-bold flex items-center gap-2">🤖 AI: <span className="text-yellow-400 text-sm">{aiResult.label}</span></p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center p-4">
-                    <div className="bg-white p-3 rounded-full shadow-sm inline-block mb-3"><Camera className="w-8 h-8 text-red-500" /></div>
-                    <p className="text-sm font-medium text-gray-600">แตะเพื่อถ่ายรูป</p>
-                    <p className="text-xs text-gray-400 mt-1">ระบบจะใช้ AI ประเมินให้อัตโนมัติ</p>
-                  </div>
-                )}
-              </div>
-            </div>
+    <div className="min-h-screen flex flex-col font-sans bg-white">
+      
+      {/* 1. Header (Navbar) แบบเต็มจอ สีน้ำเงินเข้ม */}
+      <nav className="bg-[#1E3A8A] text-white w-full shadow-md sticky top-0 z-50">
+        <div className="w-full px-6 py-4 flex justify-between items-center">
+          {/* Brand */}
+          <div className="flex flex-col">
+            <Link href="/" className="text-2xl font-bold tracking-tight hover:opacity-90 transition">
+               ThaiSave(ไทยเซฟ)
+            </Link>
+            <span className="text-[11px] text-blue-200 font-light tracking-widest opacity-80">
+               ระบบกลางจัดการภัยพิบัติแห่งชาติ
+            </span>
           </div>
 
-          {/* GPS */}
-          <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
-              <span className="bg-red-100 text-red-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
-              ตำแหน่งของคุณ *
-            </label>
-            <button type="button" onClick={handleGetLocation} disabled={loading} className={`w-full flex items-center justify-center gap-2 p-4 rounded-xl border font-medium transition-all shadow-sm active:scale-95 ${location ? 'bg-green-50 border-green-500 text-green-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-              {location ? <><CheckCircle className="w-5 h-5 text-green-600" /><span className="truncate">พิกัด: {location.lat.toFixed(6)}, {location.lng.toFixed(6)}</span></> : <><MapPin className="text-red-500 w-5 h-5" /><span>กดปุ่มนี้เพื่อระบุตำแหน่ง GPS</span></>}
-            </button>
+          {/* Desktop Menu */}
+          <div className="hidden md:flex items-center gap-8 text-sm font-medium">
+             <Link href="/center" className="hover:text-yellow-400 transition">ส่วนกลาง/ศูนย์ช่วยเหลือ</Link>
+             <Link href="/rescue" className="hover:text-yellow-400 transition">ช่วยเหลือ/กู้ภัย</Link>
+             <Link href="#" className="hover:text-yellow-400 transition">ติดต่อ</Link>
+             <Link href="#" className="hover:text-yellow-400 transition">เกี่ยวกับ</Link>
+             <button className="bg-white text-[#1E3A8A] px-6 py-2 rounded font-bold hover:bg-gray-100 transition shadow-sm">
+                แจ้งเหตุ
+             </button>
           </div>
 
-          {/* Phone */}
-          <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
-              <span className="bg-red-100 text-red-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
-              เบอร์โทรติดต่อกลับ *
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Phone className="h-5 w-5 text-gray-400" /></div>
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08x-xxx-xxxx" className="block w-full pl-10 pr-3 py-3 border-gray-300 rounded-xl bg-gray-50 focus:ring-red-500 focus:border-red-500 text-sm" required />
-            </div>
-          </div>
-
-          {/* Details */}
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2 ml-8">รายละเอียดเพิ่มเติม</label>
-            <textarea rows="3" value={details} onChange={(e) => setDetails(e.target.value)} placeholder="เช่น ระดับน้ำสูงเท่าไหร่?" className="block w-full p-3 border-gray-300 rounded-xl bg-gray-50 focus:ring-red-500 focus:border-red-500 text-sm resize-none"></textarea>
-          </div>
-
-          <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-red-600 to-red-500 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 text-lg mt-4 disabled:opacity-50">
-            <Send className="w-5 h-5" /> ส่งขอความช่วยเหลือ
+          {/* Mobile Menu Icon */}
+          <button className="md:hidden text-white">
+            <Menu size={28} />
           </button>
-        </form>
-      </main>
+        </div>
+      </nav>
+
+      {/* 2. Main Content (พื้นที่เนื้อหา) */}
+      <div className="flex-grow w-full py-8 px-4 md:px-8">
+        
+        <div className="w-full max-w-[1600px] mx-auto">
+          {/* หัวข้อหน้า */}
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
+             แจ้งเหตุขอความช่วยเหลือด่วน
+          </h1>
+
+          {/* กล่องฟอร์มสีขาว (White Paper Style) */}
+          <div className="bg-white rounded shadow-sm border border-gray-200 p-6 md:p-10 w-full">
+            
+            <div className="mb-8">
+               <p className="text-gray-600 text-lg">
+                 กรุณากรอกข้อมูลให้ครบถ้วนและแนบหลักฐานจริง เพื่อให้เจ้าหน้าที่ประเมินสถานการณ์ได้ถูกต้อง
+               </p>
+            </div>
+
+            {/* สถานะเชื่อมต่อ */}
+            {!user && (
+               <div className="bg-yellow-50 text-yellow-800 p-4 rounded mb-8 text-center animate-pulse border border-yellow-200">
+                 🔄 กำลังเชื่อมต่อระบบ...
+               </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-8">
+              
+              {/* Row 1: ประเภทภัยพิบัติ */}
+              <div>
+                 <label className="block text-gray-700 font-bold mb-2">
+                   ประเภทภัยพิบัติ
+                 </label>
+                 <select 
+                   value={disasterType}
+                   onChange={(e) => setDisasterType(e.target.value)}
+                   className="w-full p-3 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                 >
+                   <option value="น้ำท่วม (Flood)">น้ำท่วม (Flood)</option>
+                   <option value="ไฟไหม้ (Fire)">ไฟไหม้ (Fire)</option>
+                   <option value="ดินถล่ม (Landslide)">ดินถล่ม (Landslide)</option>
+                   <option value="อื่นๆ (Other)">อื่นๆ (Other)</option>
+                 </select>
+              </div>
+
+              {/* Row 2: รายละเอียด */}
+              <div>
+                <label className="block text-gray-700 font-bold mb-2">
+                  รายละเอียดสถานการณ์ (ระบุเด็ก/คนชรา/ผู้ป่วย)
+                </label>
+                <textarea 
+                  rows="4"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="เช่น น้ำท่วมถึงชั้น 2, มีผู้ป่วยติดเตียง 1 คน, เด็ก 2 คน, อาหารหมดแล้ว"
+                  className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+                  required
+                />
+              </div>
+
+              {/* Row 3: เบอร์ติดต่อ */}
+              <div>
+                <label className="block text-gray-700 font-bold mb-2">
+                  เบอร์ติดต่อ (จำเป็น)
+                </label>
+                <input 
+                  type="tel"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="08x-xxx-xxxx"
+                  className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+                  required
+                />
+              </div>
+
+              {/* Row 3: พิกัด GPS */}
+              <div>
+                <label className="block text-gray-700 font-bold mb-2">
+                  พิกัดสถานที่ (GPS)
+                </label>
+                
+                {/* 3.1 แผนที่ปักหมุด (Map Component) */}
+                <div className="w-full h-[400px] mb-4 border-2 border-gray-200 rounded-lg overflow-hidden relative z-0">
+                   <MapContainer 
+                      selectedLat={lat} 
+                      selectedLng={lng} 
+                      onLocationSelect={handleMapSelect} 
+                   />
+                </div>
+
+                {/* 3.2 ปุ่มและช่องกรอกพิกัด */}
+                <div className="flex flex-col sm:flex-row gap-0 sm:gap-2">
+                   <div className="relative flex-grow">
+                      <MapPin className="absolute top-3 left-3 text-gray-400" size={20} />
+                      <input 
+                        type="text" 
+                        value={locationString}
+                        onChange={(e) => setLocationString(e.target.value)}
+                        placeholder="พิกัดจะขึ้นอัตโนมัติเมื่อกดปุ่ม GPS หรือจิ้มแผนที่"
+                        className="w-full pl-10 p-3 border border-gray-300 rounded-t sm:rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 bg-gray-50"
+                        required
+                        readOnly // แนะนำให้ readOnly เพื่อบังคับใช้ Map/GPS
+                      />
+                   </div>
+                   <button
+                     type="button"
+                     onClick={handleGetLocation}
+                     disabled={isGettingLocation}
+                     className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-6 py-3 rounded-b sm:rounded font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap min-w-[180px]"
+                   >
+                     {isGettingLocation ? "กำลังค้นหา..." : "ดึงตำแหน่งปัจจุบัน"}
+                   </button>
+                </div>
+              </div>
+
+              {/* Row 4: แนบหลักฐาน (Visual Placeholder) */}
+              <div className="border border-dashed border-gray-300 rounded p-10 text-center bg-gray-50">
+                 <p className="text-blue-600 font-medium">อัปโหลดไฟล์</p>
+                 <p className="text-xs text-gray-400 mt-1">PNG, JPG, MP4 up to 10MB</p>
+              </div>
+
+              {/* Submit Button */}
+              <div className="pt-4">
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting || !user}
+                  className={`w-full py-4 text-white font-bold text-xl rounded shadow-md transition-all
+                    ${isSubmitting || !user 
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-[#DC2626] hover:bg-[#B91C1C] active:scale-[0.99]'}`}
+                >
+                  {isSubmitting ? "กำลังส่งข้อมูล..." : "ส่งข้อมูลขอความช่วยเหลือ"}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="bg-white py-10 mt-auto border-t border-gray-100">
+        <div className="container mx-auto px-6 text-center">
+          <p className="text-gray-600 font-medium mb-2">© 2025 ThaiSave Project. All rights reserved.</p>
+          <p className="text-gray-400 text-sm">โครงการเพื่อสังคม โดยทีมพัฒนาอาสาสมัคร</p>
+        </div>
+      </footer>
     </div>
   );
-};
-
-export default VictimPage;
+}

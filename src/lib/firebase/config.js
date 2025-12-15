@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -12,11 +12,12 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// ป้องกันการ Initialize ซ้ำ (ถ้ามีแล้วให้ใช้ตัวเดิม)
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+// Singleton Pattern: ป้องกันการ Initialize ซ้ำ และป้องกัน Error ตอน Build
+// ถ้ามีการประกาศแอปแล้ว ให้ใช้ตัวเดิม ถ้ายังไม่มี ให้สร้างใหม่
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
-console.log("Firebase Initialized Project:", firebaseConfig.projectId);
+export { app, auth, db, storage };

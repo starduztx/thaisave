@@ -1,16 +1,53 @@
 "use client";
 
-// File: src/app/page.jsx
-// Location: หน้าแรกสุด (Landing Page) - ปรับปรุง Navigation ใหม่
+// File: src/app/page.js
+// Location: หน้าแรกสุด (Landing Page)
+// Update: เพิ่ม Header (Navbar) สีน้ำเงินเข้ม แบบเดียวกับหน้าแจ้งเหตุ
 
-import { ShieldAlert, Users, Building2, ChevronRight, Siren } from 'lucide-react';
+import { ShieldAlert, Building2, ChevronRight, Siren, Menu } from 'lucide-react';
+import Link from 'next/link';
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col font-sans bg-slate-50">
       
-      {/* Hero Section */}
-      <header className="bg-gradient-to-r from-blue-900 to-blue-600 text-white pt-24 pb-48 px-6 rounded-b-[3rem] shadow-2xl relative overflow-hidden">
+      {/* --- 1. NEW HEADER (NAVBAR) --- */}
+      {/* ยกมาจากหน้าแจ้งเหตุเป๊ะๆ เพื่อให้ธีมเหมือนกัน */}
+      <nav className="bg-[#1E3A8A] text-white w-full shadow-md sticky top-0 z-50">
+        <div className="w-full px-6 py-4 flex justify-between items-center">
+          {/* Brand */}
+          <div className="flex flex-col">
+            <Link href="/" className="text-2xl font-bold tracking-tight hover:opacity-90 transition">
+               ThaiSave(ไทยเซฟ)
+            </Link>
+            <span className="text-[11px] text-blue-200 font-light tracking-widest opacity-80">
+               ระบบกลางจัดการภัยพิบัติแห่งชาติ
+            </span>
+          </div>
+
+          {/* Desktop Menu */}
+          <div className="hidden md:flex items-center gap-8 text-sm font-medium">
+             <Link href="/center" className="hover:text-yellow-400 transition">ส่วนกลาง/ศูนย์ช่วยเหลือ</Link>
+             <Link href="/rescue" className="hover:text-yellow-400 transition">ช่วยเหลือ/กู้ภัย</Link>
+             <Link href="#" className="hover:text-yellow-400 transition">ติดต่อ</Link>
+             <Link href="#" className="hover:text-yellow-400 transition">เกี่ยวกับ</Link>
+             <Link href="/victim">
+                <button className="bg-white text-[#1E3A8A] px-6 py-2 rounded font-bold hover:bg-gray-100 transition shadow-sm border border-transparent hover:border-gray-300">
+                    แจ้งเหตุ
+                </button>
+             </Link>
+          </div>
+
+          {/* Mobile Menu Icon */}
+          <button className="md:hidden text-white">
+            <Menu size={28} />
+          </button>
+        </div>
+      </nav>
+
+      {/* --- 2. HERO SECTION --- */}
+      <header className="bg-gradient-to-r from-blue-900 to-blue-600 text-white pt-20 pb-48 px-6 rounded-b-[3rem] shadow-2xl relative overflow-hidden -mt-1"> 
+        {/* -mt-1 เพื่อปิดรอยต่อถ้ามี */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-400/20 rounded-full -ml-10 -mb-10 blur-2xl"></div>
         
@@ -34,12 +71,12 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Main Navigation Cards (3 ปุ่มหลัก) */}
+      {/* --- 3. Main Navigation Cards (3 ปุ่มหลัก) --- */}
       <section className="container mx-auto px-6 -mt-32 relative z-20 pb-20">
         <div className="grid md:grid-cols-3 gap-6">
           
           {/* 1. สำหรับประชาชน (ไม่ต้อง Login) */}
-          <a href="/victim" className="block group">
+          <Link href="/victim" className="block group">
             <div className="bg-white p-8 rounded-3xl shadow-xl border-b-8 border-red-600 hover:shadow-2xl hover:-translate-y-2 transition-all cursor-pointer h-full relative overflow-hidden">
               <div className="absolute inset-0 bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               <div className="relative z-10 flex flex-col h-full">
@@ -66,10 +103,10 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-          </a>
+          </Link>
 
           {/* 2. สำหรับกู้ภัย (Login) */}
-          <a href="/rescue" className="block group">
+          <Link href="/rescue" className="block group">
             <div className="bg-white p-8 rounded-3xl shadow-xl border-b-8 border-blue-600 hover:shadow-2xl hover:-translate-y-2 transition-all cursor-pointer h-full relative overflow-hidden">
               <div className="absolute inset-0 bg-blue-50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               <div className="relative z-10 flex flex-col h-full">
@@ -96,10 +133,10 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-          </a>
+          </Link>
 
           {/* 3. สำหรับศูนย์สั่งการ (Login) */}
-          <a href="/center" className="block group">
+          <Link href="/center" className="block group">
             <div className="bg-white p-8 rounded-3xl shadow-xl border-b-8 border-green-600 hover:shadow-2xl hover:-translate-y-2 transition-all cursor-pointer h-full relative overflow-hidden">
               <div className="absolute inset-0 bg-green-50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               <div className="relative z-10 flex flex-col h-full">
@@ -126,7 +163,7 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-          </a>
+          </Link>
 
         </div>
       </section>

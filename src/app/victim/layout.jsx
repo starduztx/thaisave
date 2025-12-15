@@ -1,5 +1,6 @@
 // File: src/app/victim/layout.jsx
-// Location: Layout สำหรับส่วนผู้ประสบภัย (Mobile First Wrapper)
+// Location: Layout สำหรับส่วนผู้ประสบภัย
+// แก้ไข: ปรับให้เต็มจอ (Full Screen) และลบการ import css ที่ซ้ำซ้อน/ผิด path ออก
 
 export const metadata = {
   title: "แจ้งเหตุฉุกเฉิน | ThaiSave",
@@ -8,11 +9,11 @@ export const metadata = {
 
 export default function VictimLayout({ children }) {
   return (
-    // พื้นหลังข้างนอกเป็นสีเทาเข้มหน่อย เพื่อเน้นตัวแอปตรงกลาง
-    <div className="min-h-screen bg-slate-200 flex justify-center font-sans">
+    // เปลี่ยนจาก bg-slate-200 เป็น bg-white และลบ flex justify-center เพื่อไม่ให้มันบีบตรงกลาง
+    <div className="min-h-screen bg-white font-sans w-full">
       
-      {/* Mobile Container: บีบความกว้างให้เหมือนมือถือ และอยู่ตรงกลาง */}
-      <div className="w-full max-w-md bg-white min-h-screen shadow-2xl relative overflow-hidden">
+      {/* ลบ max-w-md ออกเพื่อให้กว้างเต็มจอ (w-full) */}
+      <div className="w-full min-h-screen relative overflow-hidden">
         {children}
       </div>
       
