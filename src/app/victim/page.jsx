@@ -42,6 +42,20 @@ export default function VictimReportPage() {
     onAuthStateChanged(auth, (u) => { if (u) setUser(u); });
   }, []);
 
+  //แปลงค่ารูปเป็น base64 (ถ้าต้องการใช้)
+  const convertToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const fileReader = new FileReader();
+      fileReader.readAsDataURL(file);
+      fileReader.onload = () => {
+        resolve(fileReader.result);
+      };
+      fileReader.onerror = (error) => {
+        reject(error);
+      };
+    });
+  };
+
   const handleMapSelect = (newLat, newLng) => {
     setLat(newLat);
     setLng(newLng);
@@ -69,6 +83,10 @@ export default function VictimReportPage() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (file.size > 800 * 1024) {
+        alert("⚠️ ไฟล์ใหญ่เกินไป! ระบบฟรีรองรับรูปไม่เกิน 800KB ครับ \n(ลองแคปหน้าจอรูปนั้นมาส่งแทน จะช่วยลดขนาดไฟล์ได้ครับ)");
+        return;
+      }
       setSelectedFile(file);
       setPreviewUrl(URL.createObjectURL(file)); // สร้าง Link ปลอมๆ เพื่อโชว์รูปในเว็บ
       setAiResult(null); // เคลียร์ค่า AI เดิมออก (ถ้ามี)
@@ -99,34 +117,14 @@ export default function VictimReportPage() {
     setIsSubmitting(true);
 
     try {
-      // ค่า Default ของ AI (กรณีไม่มีรูปหรือ error)
-      let aiAnalysisData = { label: "No Image", confidence: 0 };
+      let base64Image = null; //เพิ่มตัวแปรเก็บ base64
 
       // -----------------------------------------------------------------------
       // ✅ ส่วนที่เพิ่มใหม่: Logic การส่งรูปไปหา API และรอผลจาก AI
       // -----------------------------------------------------------------------
       if (selectedFile) {
-        // 1. เตรียมข้อมูล FormData
-        const formData = new FormData();
-        formData.append('image', selectedFile);
-
-        // 2. ยิงไปที่ API Route (/src/app/api/analyze/route.js)
-        const aiResponse = await fetch('/api/analyze', {
-            method: 'POST',
-            body: formData
-        });
+        base64Image = await convertToBase64(selectedFile); //เรียกใช้ฟังก์ชันแปลงเป็น base64
         
-        const aiJson = await aiResponse.json();
-        
-        // 3. ถ้าสำเร็จ ให้ดึงค่า Label และ Confidence มาเก็บไว้
-        if (aiJson.success) {
-            aiAnalysisData = { 
-                raw: aiJson.data, 
-                label: aiJson.data[0]?.label || "Unknown", // เอาค่าที่มั่นใจสุด
-                confidence: aiJson.data[0]?.score || 0
-            };
-            setAiResult(aiAnalysisData); // (ทางเลือก) อัปเดต UI ให้เห็นผลทันที
-        }
       }
       // -----------------------------------------------------------------------
 
@@ -140,15 +138,13 @@ export default function VictimReportPage() {
         contactPhone,
         status: 'pending',
         timestamp: serverTimestamp(),
-        // ✅ ส่วนที่เพิ่มใหม่: บันทึกข้อมูล AI ลง Database ด้วย
+        imageUrl: base64Image, //เก็บ url รูป ลงฐานข้อมูล
         hasImage: !!selectedFile,
-        aiAnalysis: aiAnalysisData 
       };
 
       await addDoc(collection(db, "reports"), reportData);
 
-      // ✅ ส่วนที่เพิ่มใหม่: แจ้งเตือน user ว่า AI วิเคราะห์เสร็จแล้ว
-      alert(`✅ ส่งข้อมูลสำเร็จ! \nAI วิเคราะห์ว่าเป็น: ${aiAnalysisData.label}`);
+      alert("✅ ส่งข้อมูลขอความช่วยเหลือสำเร็จ! \nเจ้าหน้าที่จะตรวจสอบหลักฐานและติดต่อกลับโดยเร็วที่สุด");
       
       // Reset Form
       setDescription('');
@@ -156,7 +152,7 @@ export default function VictimReportPage() {
       setLat(null);
       setLng(null);
       setContactPhone('');
-      removeImage(); // ✅ ล้างรูปออกจากหน้าจอ
+      removeImage(); 
 
     } catch (error) {
       console.error(error);
@@ -219,7 +215,7 @@ export default function VictimReportPage() {
                 <div className="flex gap-2">
                    <input type="text" value={locationString} readOnly className="flex-grow p-3 border border-gray-300 rounded bg-gray-50" placeholder="พิกัด GPS" />
                    <button type="button" onClick={handleGetLocation} disabled={isGettingLocation} className="bg-blue-600 text-white px-6 rounded whitespace-nowrap">
-                     {isGettingLocation ? "..." : "GPS"}
+                     {isGettingLocation ? "..." : "ดึงพิกัดปัจจุบัน"}
                    </button>
                 </div>
               </div>
@@ -235,7 +231,7 @@ export default function VictimReportPage() {
                     <label className="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center bg-gray-50 hover:bg-blue-50 transition cursor-pointer flex flex-col items-center justify-center gap-2">
                         <Upload size={40} className="text-blue-500" />
                         <span className="text-blue-600 font-medium">คลิกเพื่ออัปโหลดรูปภาพ</span>
-                        <span className="text-xs text-gray-400">JPG, PNG (Max 5MB)</span>
+                        <span className="text-xs text-gray-400">JPG, PNG (แนบรูปภาพที่ไม่เกิน 800KB)</span>
                         <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
                     </label>
                  ) : (
@@ -246,7 +242,7 @@ export default function VictimReportPage() {
                         </div>
                         <div className="flex-grow">
                             <p className="font-medium text-gray-700 truncate">{selectedFile.name}</p>
-                            <p className="text-sm text-green-600">พร้อมส่งตรวจสอบ AI</p>
+                            <p className="text-sm text-green-600">พร้อมส่งหลักฐาน</p>
                         </div>
                         <button type="button" onClick={removeImage} className="text-red-500 hover:text-red-700 p-2">
                             <X size={24} />
@@ -260,13 +256,11 @@ export default function VictimReportPage() {
                 <button 
                   type="submit" 
                   disabled={isSubmitting || !user} 
-                  // ✅ ส่วนที่เพิ่มใหม่: เปลี่ยนสีปุ่มถ้ากำลังทำงาน
                   className={`w-full py-4 text-white font-bold text-xl rounded shadow-md transition-all
                     ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}
                   `}
                 >
-                  {/* ✅ ส่วนที่เพิ่มใหม่: เปลี่ยนข้อความปุ่ม */}
-                  {isSubmitting ? "🤖 AI กำลังวิเคราะห์..." : "ส่งข้อมูลขอความช่วยเหลือ"}
+                  {isSubmitting ? "กำลังส่งข้อมูล..." : "ส่งข้อมูลขอความช่วยเหลือ"}
                 </button>
               </div>
 

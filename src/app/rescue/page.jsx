@@ -1,19 +1,21 @@
 "use client";
 // File: src/app/rescue/page.js
 // หน้าที่: Dashboard สำหรับทีมกู้ภัย (รับเคส, ดูแผนที่, อัปเดตสถานะ)
-// Update: ปรับ Header ให้เหมือนหน้า Home/Victim (Consistent Design)
 
 import { useState, useEffect } from 'react';
 import { db } from '../../lib/db'; 
 import { collection, query, orderBy, onSnapshot, updateDoc, doc } from "firebase/firestore";
 import Link from 'next/link';
-import { MapPin, Phone, Clock, CheckCircle, AlertTriangle, Filter, ChevronDown, User, Menu } from 'lucide-react';
+// ✅ เพิ่ม ImageIcon และ X เข้ามาใน import
+import { MapPin, Phone, Clock, CheckCircle, AlertTriangle, Filter, ChevronDown, User, Menu, Image as ImageIcon, X } from 'lucide-react';
 
 export default function RescueDashboard() {
+  // เก็บ URL ของรูปที่กำลังกดดู (ถ้าเป็น null แปลว่าปิดอยู่)
+  const [viewingImage, setViewingImage] = useState(null);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Stats (คำนวณจากข้อมูลจริง)
+  // Stats
   const [stats, setStats] = useState({
     new: 0,
     accepted: 0,
@@ -79,12 +81,11 @@ export default function RescueDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F0F2F5] font-sans">
+    <div className="min-h-screen bg-[#F0F2F5] font-sans relative">
       
-      {/* --- STANDARD HEADER (เหมือนหน้าอื่น) --- */}
+      {/* --- HEADER --- */}
       <nav className="bg-[#1E3A8A] text-white w-full shadow-md sticky top-0 z-50">
         <div className="w-full px-6 py-4 flex justify-between items-center">
-          {/* Brand */}
           <div className="flex flex-col">
             <Link href="/" className="text-2xl font-bold tracking-tight hover:opacity-90 transition leading-tight">
                ThaiSave(ไทยเซฟ)
@@ -93,27 +94,18 @@ export default function RescueDashboard() {
                ระบบกลางจัดการภัยพิบัติแห่งชาติ
             </span>
           </div>
-
-          {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-8 text-sm font-medium">
              <Link href="/center" className="hover:text-yellow-400 transition opacity-80 hover:opacity-100">ส่วนกลาง/ศูนย์ช่วยเหลือ</Link>
-             
-             {/* Active Menu */}
              <span className="text-yellow-400 font-bold border-b-2 border-yellow-400 pb-1 cursor-default">
                 ช่วยเหลือ/กู้ภัย
              </span>
-             
              <Link href="#" className="hover:text-yellow-400 transition opacity-80 hover:opacity-100">ติดต่อ</Link>
-             <Link href="#" className="hover:text-yellow-400 transition opacity-80 hover:opacity-100">เกี่ยวกับ</Link>
-             
              <Link href="/victim">
                 <button className="bg-white text-[#1E3A8A] px-6 py-2 rounded font-bold hover:bg-gray-100 transition shadow-sm border border-transparent hover:border-gray-300">
                     แจ้งเหตุ
                 </button>
              </Link>
           </div>
-
-          {/* Mobile Menu Icon */}
           <button className="md:hidden text-white">
             <Menu size={28} />
           </button>
@@ -136,18 +128,6 @@ export default function RescueDashboard() {
           <StatCard label="กำลังดำเนินการ" value={stats.accepted} color="text-blue-600" borderColor="border-blue-500" />
           <StatCard label="ปิดเคสแล้ว" value={stats.completed} color="text-green-600" borderColor="border-green-500" />
           <StatCard label="ทั้งหมด" value={stats.total} color="text-gray-600" borderColor="border-gray-300" />
-        </div>
-
-        {/* Filter Section */}
-        <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-lg shadow-sm mb-6 border border-gray-200">
-           <h3 className="font-bold text-lg text-gray-700 flex items-center gap-2">
-             <AlertTriangle size={20} className="text-red-500"/> รายการแจ้งเหตุล่าสุด
-           </h3>
-           <div className="flex gap-2 mt-2 md:mt-0">
-              <button className="flex items-center gap-2 px-4 py-2 border rounded-lg text-sm bg-gray-50 hover:bg-gray-100 text-gray-700">
-                <Filter size={14}/> กรองข้อมูล <ChevronDown size={14}/>
-              </button>
-           </div>
         </div>
 
         {/* Case List */}
@@ -211,6 +191,18 @@ export default function RescueDashboard() {
 
                     {/* ปุ่ม Action */}
                     <div className="md:w-56 flex flex-col justify-end gap-2 border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6">
+                       
+                       {/* ปุ่มดูหลักฐาน (โชว์ถ้ามีรูป ไม่สนสถานะ) */}
+                       {item.imageUrl && (
+                          <button 
+                            onClick={() => setViewingImage(item.imageUrl)}
+                            className="w-full flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-blue-600 border border-gray-200 px-3 py-2 rounded-lg bg-white hover:bg-gray-50 transition-colors mb-2"
+                          >
+                            <ImageIcon size={16} />
+                            <span>ดูรูปหลักฐาน</span>
+                          </button>
+                       )}
+
                        {item.status === 'pending' && (
                          <button 
                            onClick={() => handleAcceptCase(item.id)}
@@ -227,19 +219,18 @@ export default function RescueDashboard() {
                            <CheckCircle size={16}/> ปิดเคส (สำเร็จ)
                          </button>
                        )}
-                       {item.status === 'completed' && (
-                         <button disabled className="w-full bg-gray-100 text-gray-400 py-3 rounded-lg font-bold cursor-not-allowed text-sm border border-gray-200">
-                           ดำเนินการเสร็จสิ้น
-                         </button>
-                       )}
                        
-                       <a 
-                         href={`https://www.google.com/maps/search/?api=1&query=${item.location}`} 
-                         target="_blank"
-                         className="w-full text-center text-xs text-gray-500 hover:text-blue-600 hover:underline py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                       >
-                         เปิดแผนที่ Google Maps ↗
-                       </a>
+                       {/* ปุ่มเปิด Google Maps (แก้ลิงก์ให้ถูกต้อง) */}
+                       {item.location && (
+                           <a 
+                             href={`https://www.google.com/maps/search/?api=1&query=${item.location}`} 
+                             target="_blank"
+                             rel="noopener noreferrer"
+                             className="w-full text-center text-xs text-gray-500 hover:text-blue-600 hover:underline py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                           >
+                             เปิดแผนที่ Google Maps ↗
+                           </a>
+                       )}
                     </div>
                   </div>
                 </div>
@@ -248,11 +239,37 @@ export default function RescueDashboard() {
           )}
         </div>
       </div>
+
+      {/* ✅ MODAL แสดงรูปภาพ */}
+      {viewingImage && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setViewingImage(null)}>
+            <div className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center animate-in fade-in zoom-in duration-200">
+            {/* ปุ่มปิด */}
+            <button 
+                onClick={() => setViewingImage(null)}
+                className="absolute -top-12 right-0 md:-right-12 text-white hover:text-gray-300 transition-colors bg-white/10 p-2 rounded-full"
+            >
+                <X size={24} />
+            </button>
+            
+            {/* รูปภาพ Base64 */}
+            <img 
+                src={viewingImage} 
+                alt="Evidence" 
+                className="w-auto h-auto max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl bg-black"
+                onClick={(e) => e.stopPropagation()} // กดที่รูปไม่ปิด
+            />
+            <p className="text-white/80 mt-4 text-sm bg-black/50 px-4 py-1 rounded-full">
+                กดพื้นที่ว่างเพื่อปิด
+            </p>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 }
 
-// Sub-component สำหรับ Card สถิติ
 function StatCard({ label, value, color, borderColor }) {
   return (
     <div className={`bg-white p-6 rounded-xl shadow-sm border-b-4 ${borderColor} flex flex-col items-center justify-center transition-transform hover:-translate-y-1`}>
