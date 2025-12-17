@@ -10,7 +10,7 @@ import Link from 'next/link';
 export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col font-sans bg-slate-50">
-      
+
       {/* --- 1. NEW HEADER (NAVBAR) --- */}
       {/* ยกมาจากหน้าแจ้งเหตุเป๊ะๆ เพื่อให้ธีมเหมือนกัน */}
       <nav className="bg-[#1E3A8A] text-white w-full shadow-md sticky top-0 z-50">
@@ -18,24 +18,24 @@ export default function LandingPage() {
           {/* Brand */}
           <div className="flex flex-col">
             <Link href="/" className="text-2xl font-bold tracking-tight hover:opacity-90 transition">
-               ThaiSave(ไทยเซฟ)
+              ThaiSave(ไทยเซฟ)
             </Link>
             <span className="text-[11px] text-blue-200 font-light tracking-widest opacity-80">
-               ระบบกลางจัดการภัยพิบัติแห่งชาติ
+              ระบบกลางจัดการภัยพิบัติแห่งชาติ
             </span>
           </div>
 
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-8 text-sm font-medium">
-             <Link href="/center" className="hover:text-yellow-400 transition">ส่วนกลาง/ศูนย์ช่วยเหลือ</Link>
-             <Link href="/rescue" className="hover:text-yellow-400 transition">ช่วยเหลือ/กู้ภัย</Link>
-             <Link href="#" className="hover:text-yellow-400 transition">ติดต่อ</Link>
-             <Link href="#" className="hover:text-yellow-400 transition">เกี่ยวกับ</Link>
-             <Link href="/victim">
-                <button className="bg-white text-[#1E3A8A] px-6 py-2 rounded font-bold hover:bg-gray-100 transition shadow-sm border border-transparent hover:border-gray-300">
-                    แจ้งเหตุ
-                </button>
-             </Link>
+            <Link href="/center" className="hover:text-yellow-400 transition">ส่วนกลาง/ศูนย์ช่วยเหลือ</Link>
+            <Link href="/rescue" className="hover:text-yellow-400 transition">ช่วยเหลือ/กู้ภัย</Link>
+            <Link href="#" className="hover:text-yellow-400 transition">ติดต่อ</Link>
+            <Link href="#" className="hover:text-yellow-400 transition">เกี่ยวกับ</Link>
+            <Link href="/victim">
+              <button className="bg-white text-[#1E3A8A] px-6 py-2 rounded font-bold hover:bg-gray-100 transition shadow-sm border border-transparent hover:border-gray-300">
+                แจ้งเหตุ
+              </button>
+            </Link>
           </div>
 
           {/* Mobile Menu Icon */}
@@ -46,22 +46,22 @@ export default function LandingPage() {
       </nav>
 
       {/* --- 2. HERO SECTION --- */}
-      <header className="bg-gradient-to-r from-blue-900 to-blue-600 text-white pt-20 pb-48 px-6 rounded-b-[3rem] shadow-2xl relative overflow-hidden -mt-1"> 
+      <header className="bg-gradient-to-r from-blue-900 to-blue-600 text-white pt-20 pb-48 px-6 rounded-b-[3rem] shadow-2xl relative overflow-hidden -mt-1">
         {/* -mt-1 เพื่อปิดรอยต่อถ้ามี */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-400/20 rounded-full -ml-10 -mb-10 blur-2xl"></div>
-        
+
         <div className="container mx-auto text-center relative z-10">
           <div className="inline-flex items-center gap-2 bg-blue-800/50 backdrop-blur-sm px-4 py-2 rounded-full mb-6 border border-blue-400/30 animate-pulse">
             <span className="w-2.5 h-2.5 bg-green-400 rounded-full shadow-[0_0_10px_rgba(74,222,128,0.5)]"></span>
             <span className="text-xs font-semibold tracking-wide uppercase text-blue-100">ระบบพร้อมใช้งาน 24 ชม.</span>
           </div>
-          
+
           <h1 className="text-5xl md:text-7xl font-extrabold mb-6 leading-tight">
-            ThaiSave <br/>
+            ThaiSave <br />
             <span className="text-yellow-300 drop-shadow-lg">รวมพลังกู้ภัย</span> ฝ่าวิกฤต
           </h1>
-          
+
           <p className="text-blue-100 text-lg md:text-xl max-w-2xl mx-auto mb-4 leading-relaxed">
             แพลตฟอร์มกลางสำหรับจัดการภัยพิบัติแห่งชาติ
           </p>
@@ -74,7 +74,7 @@ export default function LandingPage() {
       {/* --- 3. Main Navigation Cards (3 ปุ่มหลัก) --- */}
       <section className="container mx-auto px-6 -mt-32 relative z-20 pb-20">
         <div className="grid md:grid-cols-3 gap-6">
-          
+
           {/* 1. สำหรับประชาชน (ไม่ต้อง Login) */}
           <Link href="/victim" className="block group">
             <div className="bg-white p-8 rounded-3xl shadow-xl border-b-8 border-red-600 hover:shadow-2xl hover:-translate-y-2 transition-all cursor-pointer h-full relative overflow-hidden">
@@ -88,14 +88,14 @@ export default function LandingPage() {
                     ประชาชน
                   </span>
                 </div>
-                
+
                 <h3 className="text-2xl font-bold text-gray-800 mb-3 group-hover:text-red-700 transition-colors">
                   แจ้งเหตุฉุกเฉิน
                 </h3>
                 <p className="text-gray-600 mb-6 flex-grow">
                   ขอความช่วยเหลือทันที! ไม่ต้องลงทะเบียน ใช้ AI ช่วยวิเคราะห์พิกัดและประเมินสถานการณ์
                 </p>
-                
+
                 <div className="mt-auto pt-4 border-t border-gray-100">
                   <div className="w-full bg-red-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 group-hover:bg-red-700 transition-colors">
                     แจ้งเหตุทันที <ChevronRight className="w-5 h-5" />
@@ -118,14 +118,14 @@ export default function LandingPage() {
                     เจ้าหน้าที่
                   </span>
                 </div>
-                
+
                 <h3 className="text-2xl font-bold text-gray-800 mb-3 group-hover:text-blue-700 transition-colors">
                   สำหรับทีมกู้ภัย
                 </h3>
                 <p className="text-gray-600 mb-6 flex-grow">
                   เข้าสู่ระบบเพื่อรับงาน คัดกรองเคสวิกฤต และอัปเดตสถานะการช่วยเหลือแบบ Real-time
                 </p>
-                
+
                 <div className="mt-auto pt-4 border-t border-gray-100">
                   <div className="text-blue-600 font-bold flex items-center gap-2 group-hover:underline">
                     เข้าสู่ระบบกู้ภัย <ChevronRight className="w-5 h-5" />
@@ -148,14 +148,14 @@ export default function LandingPage() {
                     หน่วยงานรัฐ
                   </span>
                 </div>
-                
+
                 <h3 className="text-2xl font-bold text-gray-800 mb-3 group-hover:text-green-700 transition-colors">
                   ศูนย์สั่งการ
                 </h3>
                 <p className="text-gray-600 mb-6 flex-grow">
                   Dashboard ภาพรวมสถานการณ์ จัดสรรทรัพยากร และยืนยันข้อมูลผู้ประสบภัย
                 </p>
-                
+
                 <div className="mt-auto pt-4 border-t border-gray-100">
                   <div className="text-green-600 font-bold flex items-center gap-2 group-hover:underline">
                     เข้าสู่ระบบศูนย์ฯ <ChevronRight className="w-5 h-5" />

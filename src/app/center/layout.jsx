@@ -1,11 +1,18 @@
-// File: layout.jsx
-// Location: src/app/center/layout.jsx
-// Created for ThaiSave Project
 
-const CenterLayout = () => {
-  return (
-    <div>CenterLayout</div>
-  );
+
+export const metadata = {
+  title: "Center Dashboard | ThaiSave",
+  description: "ระบบบริหารจัดการภัยพิบัติสำหรับเจ้าหน้าที่",
 };
 
-export default CenterLayout;
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+
+export default function CenterLayout({ children }) {
+  return (
+    <ProtectedRoute allowedRoles={['center', 'rescue']}>
+      <div className="w-full min-h-screen font-sans">
+        {children}
+      </div>
+    </ProtectedRoute>
+  );
+}

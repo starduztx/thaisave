@@ -7,11 +7,14 @@ export const metadata = {
   description: "ระบบบริหารจัดการภัยพิบัติสำหรับเจ้าหน้าที่กู้ภัย",
 };
 
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+
 export default function RescueLayout({ children }) {
   return (
-    // กำหนดให้เต็มจอและใช้ฟอนต์มาตรฐาน
-    <div className="w-full min-h-screen font-sans">
-      {children}
-    </div>
+    <ProtectedRoute allowedRoles={['rescue', 'center']}>
+      <div className="w-full min-h-screen font-sans">
+        {children}
+      </div>
+    </ProtectedRoute>
   );
 }

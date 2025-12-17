@@ -5,22 +5,22 @@
 
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic'; // จำเป็นสำหรับ Map
-import { db } from '../../lib/db'; 
+import { db } from '../../lib/db';
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import Link from 'next/link';
 import { ChevronLeft, MapPin, Crosshair, AlertTriangle, Send, Menu } from 'lucide-react';
 
 // Import Map แบบ Dynamic (เพื่อแก้ปัญหา Server-side Rendering)
-const MapContainer = dynamic(() => import('../../components/map/MapContainer'), { 
-  ssr: false, 
+const MapContainer = dynamic(() => import('../../components/map/MapContainer'), {
+  ssr: false,
   loading: () => <div className="w-full h-[400px] bg-slate-100 animate-pulse flex items-center justify-center text-slate-400">กำลังโหลดแผนที่...</div>
 });
 
 export default function VictimReportPage() {
-  const [disasterType, setDisasterType] = useState('น้ำท่วม (Flood)'); 
+  const [disasterType, setDisasterType] = useState('น้ำท่วม (Flood)');
   const [description, setDescription] = useState('');
-  
+
   // State สำหรับพิกัด (เก็บแยกเพื่อให้ส่งเข้า Map ได้)
   const [lat, setLat] = useState(null);
   const [lng, setLng] = useState(null);
@@ -67,12 +67,12 @@ export default function VictimReportPage() {
       (position) => {
         const latitude = position.coords.latitude;
         const longitude = position.coords.longitude;
-        
+
         // อัปเดตทั้ง Map และ Input Box
         setLat(latitude);
         setLng(longitude);
         setLocationString(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-        
+
         setIsGettingLocation(false);
       },
       (error) => {
@@ -87,7 +87,7 @@ export default function VictimReportPage() {
   // 2. Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!user) {
       alert("⚠️ กำลังเชื่อมต่อระบบ... กรุณารอสักครู่");
       return;
@@ -121,7 +121,7 @@ export default function VictimReportPage() {
       await addDoc(collection(db, "reports"), reportData);
 
       alert("✅ ส่งข้อมูลขอความช่วยเหลือสำเร็จ!");
-      
+
       // Reset Form
       setDescription('');
       setLocationString('');
@@ -140,29 +140,29 @@ export default function VictimReportPage() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-white">
-      
+
       {/* 1. Header (Navbar) แบบเต็มจอ สีน้ำเงินเข้ม */}
       <nav className="bg-[#1E3A8A] text-white w-full shadow-md sticky top-0 z-50">
         <div className="w-full px-6 py-4 flex justify-between items-center">
           {/* Brand */}
           <div className="flex flex-col">
             <Link href="/" className="text-2xl font-bold tracking-tight hover:opacity-90 transition">
-               ThaiSave(ไทยเซฟ)
+              ThaiSave(ไทยเซฟ)
             </Link>
             <span className="text-[11px] text-blue-200 font-light tracking-widest opacity-80">
-               ระบบกลางจัดการภัยพิบัติแห่งชาติ
+              ระบบกลางจัดการภัยพิบัติแห่งชาติ
             </span>
           </div>
 
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-8 text-sm font-medium">
-             <Link href="/center" className="hover:text-yellow-400 transition">ส่วนกลาง/ศูนย์ช่วยเหลือ</Link>
-             <Link href="/rescue" className="hover:text-yellow-400 transition">ช่วยเหลือ/กู้ภัย</Link>
-             <Link href="#" className="hover:text-yellow-400 transition">ติดต่อ</Link>
-             <Link href="#" className="hover:text-yellow-400 transition">เกี่ยวกับ</Link>
-             <button className="bg-white text-[#1E3A8A] px-6 py-2 rounded font-bold hover:bg-gray-100 transition shadow-sm">
-                แจ้งเหตุ
-             </button>
+            <Link href="/center" className="hover:text-yellow-400 transition">ส่วนกลาง/ศูนย์ช่วยเหลือ</Link>
+            <Link href="/rescue" className="hover:text-yellow-400 transition">ช่วยเหลือ/กู้ภัย</Link>
+            <Link href="#" className="hover:text-yellow-400 transition">ติดต่อ</Link>
+            <Link href="#" className="hover:text-yellow-400 transition">เกี่ยวกับ</Link>
+            <button className="bg-white text-[#1E3A8A] px-6 py-2 rounded font-bold hover:bg-gray-100 transition shadow-sm">
+              แจ้งเหตุ
+            </button>
           </div>
 
           {/* Mobile Menu Icon */}
@@ -174,46 +174,46 @@ export default function VictimReportPage() {
 
       {/* 2. Main Content (พื้นที่เนื้อหา) */}
       <div className="flex-grow w-full py-8 px-4 md:px-8">
-        
+
         <div className="w-full max-w-[1600px] mx-auto">
           {/* หัวข้อหน้า */}
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
-             แจ้งเหตุขอความช่วยเหลือด่วน
+            แจ้งเหตุขอความช่วยเหลือด่วน
           </h1>
 
           {/* กล่องฟอร์มสีขาว (White Paper Style) */}
           <div className="bg-white rounded shadow-sm border border-gray-200 p-6 md:p-10 w-full">
-            
+
             <div className="mb-8">
-               <p className="text-gray-600 text-lg">
-                 กรุณากรอกข้อมูลให้ครบถ้วนและแนบหลักฐานจริง เพื่อให้เจ้าหน้าที่ประเมินสถานการณ์ได้ถูกต้อง
-               </p>
+              <p className="text-gray-600 text-lg">
+                กรุณากรอกข้อมูลให้ครบถ้วนและแนบหลักฐานจริง เพื่อให้เจ้าหน้าที่ประเมินสถานการณ์ได้ถูกต้อง
+              </p>
             </div>
 
             {/* สถานะเชื่อมต่อ */}
             {!user && (
-               <div className="bg-yellow-50 text-yellow-800 p-4 rounded mb-8 text-center animate-pulse border border-yellow-200">
-                 🔄 กำลังเชื่อมต่อระบบ...
-               </div>
+              <div className="bg-yellow-50 text-yellow-800 p-4 rounded mb-8 text-center animate-pulse border border-yellow-200">
+                🔄 กำลังเชื่อมต่อระบบ...
+              </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-8">
-              
+
               {/* Row 1: ประเภทภัยพิบัติ */}
               <div>
-                 <label className="block text-gray-700 font-bold mb-2">
-                   ประเภทภัยพิบัติ
-                 </label>
-                 <select 
-                   value={disasterType}
-                   onChange={(e) => setDisasterType(e.target.value)}
-                   className="w-full p-3 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                 >
-                   <option value="น้ำท่วม (Flood)">น้ำท่วม (Flood)</option>
-                   <option value="ไฟไหม้ (Fire)">ไฟไหม้ (Fire)</option>
-                   <option value="ดินถล่ม (Landslide)">ดินถล่ม (Landslide)</option>
-                   <option value="อื่นๆ (Other)">อื่นๆ (Other)</option>
-                 </select>
+                <label className="block text-gray-700 font-bold mb-2">
+                  ประเภทภัยพิบัติ
+                </label>
+                <select
+                  value={disasterType}
+                  onChange={(e) => setDisasterType(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                >
+                  <option value="น้ำท่วม (Flood)">น้ำท่วม (Flood)</option>
+                  <option value="ไฟไหม้ (Fire)">ไฟไหม้ (Fire)</option>
+                  <option value="ดินถล่ม (Landslide)">ดินถล่ม (Landslide)</option>
+                  <option value="อื่นๆ (Other)">อื่นๆ (Other)</option>
+                </select>
               </div>
 
               {/* Row 2: รายละเอียด */}
@@ -221,7 +221,7 @@ export default function VictimReportPage() {
                 <label className="block text-gray-700 font-bold mb-2">
                   รายละเอียดสถานการณ์ (ระบุเด็ก/คนชรา/ผู้ป่วย)
                 </label>
-                <textarea 
+                <textarea
                   rows="4"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -236,7 +236,7 @@ export default function VictimReportPage() {
                 <label className="block text-gray-700 font-bold mb-2">
                   เบอร์ติดต่อ (จำเป็น)
                 </label>
-                <input 
+                <input
                   type="tel"
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
@@ -251,55 +251,55 @@ export default function VictimReportPage() {
                 <label className="block text-gray-700 font-bold mb-2">
                   พิกัดสถานที่ (GPS)
                 </label>
-                
+
                 {/* 3.1 แผนที่ปักหมุด (Map Component) */}
                 <div className="w-full h-[400px] mb-4 border-2 border-gray-200 rounded-lg overflow-hidden relative z-0">
-                   <MapContainer 
-                      selectedLat={lat} 
-                      selectedLng={lng} 
-                      onLocationSelect={handleMapSelect} 
-                   />
+                  <MapContainer
+                    selectedLat={lat}
+                    selectedLng={lng}
+                    onLocationSelect={handleMapSelect}
+                  />
                 </div>
 
                 {/* 3.2 ปุ่มและช่องกรอกพิกัด */}
                 <div className="flex flex-col sm:flex-row gap-0 sm:gap-2">
-                   <div className="relative flex-grow">
-                      <MapPin className="absolute top-3 left-3 text-gray-400" size={20} />
-                      <input 
-                        type="text" 
-                        value={locationString}
-                        onChange={(e) => setLocationString(e.target.value)}
-                        placeholder="พิกัดจะขึ้นอัตโนมัติเมื่อกดปุ่ม GPS หรือจิ้มแผนที่"
-                        className="w-full pl-10 p-3 border border-gray-300 rounded-t sm:rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 bg-gray-50"
-                        required
-                        readOnly // แนะนำให้ readOnly เพื่อบังคับใช้ Map/GPS
-                      />
-                   </div>
-                   <button
-                     type="button"
-                     onClick={handleGetLocation}
-                     disabled={isGettingLocation}
-                     className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-6 py-3 rounded-b sm:rounded font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap min-w-[180px]"
-                   >
-                     {isGettingLocation ? "กำลังค้นหา..." : "ดึงตำแหน่งปัจจุบัน"}
-                   </button>
+                  <div className="relative flex-grow">
+                    <MapPin className="absolute top-3 left-3 text-gray-400" size={20} />
+                    <input
+                      type="text"
+                      value={locationString}
+                      onChange={(e) => setLocationString(e.target.value)}
+                      placeholder="พิกัดจะขึ้นอัตโนมัติเมื่อกดปุ่ม GPS หรือจิ้มแผนที่"
+                      className="w-full pl-10 p-3 border border-gray-300 rounded-t sm:rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 bg-gray-50"
+                      required
+                      readOnly // แนะนำให้ readOnly เพื่อบังคับใช้ Map/GPS
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGetLocation}
+                    disabled={isGettingLocation}
+                    className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-6 py-3 rounded-b sm:rounded font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap min-w-[180px]"
+                  >
+                    {isGettingLocation ? "กำลังค้นหา..." : "ดึงตำแหน่งปัจจุบัน"}
+                  </button>
                 </div>
               </div>
 
               {/* Row 4: แนบหลักฐาน (Visual Placeholder) */}
               <div className="border border-dashed border-gray-300 rounded p-10 text-center bg-gray-50">
-                 <p className="text-blue-600 font-medium">อัปโหลดไฟล์</p>
-                 <p className="text-xs text-gray-400 mt-1">PNG, JPG, MP4 up to 10MB</p>
+                <p className="text-blue-600 font-medium">อัปโหลดไฟล์</p>
+                <p className="text-xs text-gray-400 mt-1">PNG, JPG, MP4 up to 10MB</p>
               </div>
 
               {/* Submit Button */}
               <div className="pt-4">
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isSubmitting || !user}
                   className={`w-full py-4 text-white font-bold text-xl rounded shadow-md transition-all
-                    ${isSubmitting || !user 
-                      ? 'bg-gray-400 cursor-not-allowed' 
+                    ${isSubmitting || !user
+                      ? 'bg-gray-400 cursor-not-allowed'
                       : 'bg-[#DC2626] hover:bg-[#B91C1C] active:scale-[0.99]'}`}
                 >
                   {isSubmitting ? "กำลังส่งข้อมูล..." : "ส่งข้อมูลขอความช่วยเหลือ"}
