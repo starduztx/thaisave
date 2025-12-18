@@ -9,7 +9,7 @@ import { db } from '../../lib/db';
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import Link from 'next/link';
-import { ChevronLeft, MapPin, Crosshair, AlertTriangle, Send, Menu } from 'lucide-react';
+import { ChevronLeft, MapPin, Crosshair, AlertTriangle, Send, Menu, Upload, X } from 'lucide-react';
 
 // Import Map แบบ Dynamic (เพื่อแก้ปัญหา Server-side Rendering)
 const MapContainer = dynamic(() => import('../../components/map/MapContainer'), {
@@ -25,6 +25,10 @@ export default function VictimReportPage() {
   const [lat, setLat] = useState(null);
   const [lng, setLng] = useState(null);
   const [locationString, setLocationString] = useState(''); // สำหรับโชว์ใน Input Box
+
+  // State สำหรับจัดการรูปภาพ
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -54,6 +58,39 @@ export default function VictimReportPage() {
     setLat(newLat);
     setLng(newLng);
     setLocationString(`${newLat.toFixed(6)}, ${newLng.toFixed(6)}`);
+  };
+
+  // Helper: แปลงไฟล์เป็น Base64
+  const convertToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const fileReader = new FileReader();
+      fileReader.readAsDataURL(file);
+      fileReader.onload = () => {
+        resolve(fileReader.result);
+      };
+      fileReader.onerror = (error) => {
+        reject(error);
+      };
+    });
+  };
+
+  // จัดการเมื่อเลือกไฟล์
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 800 * 1024) {
+        alert("⚠️ ไฟล์ใหญ่เกินไป! ระบบรองรับรูปไม่เกิน 800KB ครับ");
+        return;
+      }
+      setSelectedFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  // ลบรูปภาพ
+  const removeImage = () => {
+    setSelectedFile(null);
+    setPreviewUrl(null);
   };
 
   // ฟังก์ชัน: ดึงพิกัด GPS
@@ -104,6 +141,13 @@ export default function VictimReportPage() {
     setIsSubmitting(true);
 
     try {
+      let base64Image = null;
+
+      // แปลงรูปเป็น Base64 ถ้ามี
+      if (selectedFile) {
+        base64Image = await convertToBase64(selectedFile);
+      }
+
       const reportData = {
         userId: user.uid,
         disasterType,
@@ -114,7 +158,8 @@ export default function VictimReportPage() {
         contactName,
         status: 'pending',
         timestamp: serverTimestamp(),
-        hasImage: false,
+        imageUrl: base64Image,
+        hasImage: !!selectedFile,
         aiAnalysis: { label: "Text Only", confidence: 100 }
       };
 
@@ -125,6 +170,8 @@ export default function VictimReportPage() {
       // Reset Form
       setDescription('');
       setLocationString('');
+      removeImage(); // Clear image
+
       setLat(null);
       setLng(null);
       setContactName('');
@@ -287,9 +334,32 @@ export default function VictimReportPage() {
               </div>
 
               {/* Row 4: แนบหลักฐาน (Visual Placeholder) */}
-              <div className="border border-dashed border-gray-300 rounded p-10 text-center bg-gray-50">
-                <p className="text-blue-600 font-medium">อัปโหลดไฟล์</p>
-                <p className="text-xs text-gray-400 mt-1">PNG, JPG, MP4 up to 10MB</p>
+              {/* Row 4: แนบหลักฐาน (รูปภาพ) */}
+              <div>
+                <label className="block text-gray-700 font-bold mb-2">แนบหลักฐาน (รูปภาพ)</label>
+
+                {!selectedFile ? (
+                  <label className="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center bg-gray-50 hover:bg-blue-50 transition cursor-pointer flex flex-col items-center justify-center gap-2">
+                    <Upload size={40} className="text-blue-500" />
+                    <span className="text-blue-600 font-medium">คลิกเพื่ออัปโหลดรูปภาพ</span>
+                    <span className="text-xs text-gray-400">JPG, PNG (ขนาดไม่เกิน 800KB)</span>
+                    <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                  </label>
+                ) : (
+                  <div className="relative border rounded-lg p-4 bg-gray-50 flex items-center gap-4">
+                    <div className="relative w-24 h-24 rounded overflow-hidden border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-grow">
+                      <p className="font-medium text-gray-700 truncate">{selectedFile.name}</p>
+                      <p className="text-sm text-green-600">พร้อมส่งหลักฐาน</p>
+                    </div>
+                    <button type="button" onClick={removeImage} className="text-red-500 hover:text-red-700 p-2">
+                      <X size={24} />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Submit Button */}

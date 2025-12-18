@@ -7,13 +7,15 @@ import { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
 import { collection, query, orderBy, onSnapshot, updateDoc, doc } from "firebase/firestore";
 import Link from 'next/link';
-import { MapPin, Phone, Clock, CheckCircle, AlertTriangle, Filter, ChevronDown, User, Menu } from 'lucide-react';
+import { MapPin, Phone, Clock, CheckCircle, AlertTriangle, Filter, ChevronDown, User, Menu, Image as ImageIcon, X } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 // ... other imports
 
 export default function RescueDashboard() {
+  // เก็บ URL ของรูปที่กำลังกดดู (ถ้าเป็น null แปลว่าปิดอยู่)
+  const [viewingImage, setViewingImage] = useState(null);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true); // Loading for DATA, not Auth
   const { logout } = useAuth();
@@ -222,6 +224,18 @@ export default function RescueDashboard() {
 
                     {/* ปุ่ม Action */}
                     <div className="md:w-56 flex flex-col justify-end gap-2 border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6">
+
+                      {/* ปุ่มดูหลักฐาน (โชว์ถ้ามีรูป ไม่สนสถานะ) */}
+                      {item.imageUrl && (
+                        <button
+                          onClick={() => setViewingImage(item.imageUrl)}
+                          className="w-full flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-blue-600 border border-gray-200 px-3 py-2 rounded-lg bg-white hover:bg-gray-50 transition-colors mb-2"
+                        >
+                          <ImageIcon size={16} />
+                          <span>ดูรูปหลักฐาน</span>
+                        </button>
+                      )}
+
                       {item.status === 'pending' && (
                         <button
                           onClick={() => handleAcceptCase(item.id)}
@@ -259,6 +273,34 @@ export default function RescueDashboard() {
           )}
         </div>
       </div>
+
+      {/* ✅ MODAL แสดงรูปภาพ */}
+      {viewingImage && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setViewingImage(null)}>
+          <div className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center animate-in fade-in zoom-in duration-200">
+            {/* ปุ่มปิด */}
+            <button
+              onClick={() => setViewingImage(null)}
+              className="absolute -top-12 right-0 md:-right-12 text-white hover:text-gray-300 transition-colors bg-white/10 p-2 rounded-full"
+            >
+              <X size={24} />
+            </button>
+
+            {/* รูปภาพ Base64 */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={viewingImage}
+              alt="Evidence"
+              className="w-auto h-auto max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl bg-black"
+              onClick={(e) => e.stopPropagation()} // กดที่รูปไม่ปิด
+            />
+            <p className="text-white/80 mt-4 text-sm bg-black/50 px-4 py-1 rounded-full">
+              กดพื้นที่ว่างเพื่อปิด
+            </p>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
