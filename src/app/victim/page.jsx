@@ -5,7 +5,6 @@ import { db } from '../../lib/db';
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import Link from 'next/link';
-// ✅ ส่วนที่เพิ่มใหม่: Import ไอคอน Upload, X, ImageIcon มาใช้ตกแต่ง
 import { MapPin, Menu, Upload, X, Image as ImageIcon } from 'lucide-react'; 
 
 const MapContainer = dynamic(() => import('../../components/map/MapContainer'), { 
