@@ -93,7 +93,7 @@ export default function LandingPage() {
                   แจ้งเหตุฉุกเฉิน
                 </h3>
                 <p className="text-gray-600 mb-6 flex-grow">
-                  ขอความช่วยเหลือทันที! ไม่ต้องลงทะเบียน ใช้ AI ช่วยวิเคราะห์พิกัดและประเมินสถานการณ์
+                  ขอความช่วยเหลือทันที! ไม่ต้องลงทะเบียน
                 </p>
 
                 <div className="mt-auto pt-4 border-t border-gray-100">

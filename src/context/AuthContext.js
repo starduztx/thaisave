@@ -56,11 +56,12 @@ export const AuthProvider = ({ children }) => {
 
             if (!userDoc.exists()) {
                 const adminEmails = ["admin@thaisave.com", "starnng@gmail.com"];
-                const role = adminEmails.includes(user.email) ? "center" : "rescue";
+                const userEmail = user.email || "";
+                const role = adminEmails.includes(userEmail) ? "center" : "rescue";
 
                 await setDoc(userRef, {
                     uid: user.uid,
-                    email: user.email,
+                    email: userEmail,
                     name: user.displayName,
                     role: role,
                     createdAt: new Date().toISOString(),
@@ -100,8 +101,8 @@ export const AuthProvider = ({ children }) => {
 
                         const newProfile = {
                             uid: currentUser.uid,
-                            email: currentUser.email,
-                            name: currentUser.displayName || "User",
+                            email: currentUser.email || "" ,
+                            name: currentUser.displayName || "กู้ภัย",
                             role: role,
                             createdAt: new Date().toISOString(),
                             photoURL: currentUser.photoURL

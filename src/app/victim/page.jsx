@@ -9,7 +9,9 @@ import { db } from '../../lib/db';
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import Link from 'next/link';
-import { ChevronLeft, MapPin, Crosshair, AlertTriangle, Send, Menu, Upload, X } from 'lucide-react';
+import { ChevronLeft, MapPin, Crosshair, AlertTriangle, Send, Menu, Upload, X} from 'lucide-react';
+import { useRouter } from "next/navigation";
+
 
 // Import Map แบบ Dynamic (เพื่อแก้ปัญหา Server-side Rendering)
 const MapContainer = dynamic(() => import('../../components/map/MapContainer'), {
@@ -35,6 +37,8 @@ export default function VictimReportPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [user, setUser] = useState(null);
+
+  const router = useRouter();
 
   // 1. Auto Login
   useEffect(() => {
@@ -124,7 +128,6 @@ export default function VictimReportPage() {
   // 2. Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!user) {
       alert("⚠️ กำลังเชื่อมต่อระบบ... กรุณารอสักครู่");
       return;
@@ -156,6 +159,7 @@ export default function VictimReportPage() {
         latitude: lat,            // ส่งแยก field ไปด้วยเผื่อใช้ทำแผนที่รวม
         longitude: lng,
         contactName,
+        contactPhone,
         status: 'pending',
         timestamp: serverTimestamp(),
         imageUrl: base64Image,
@@ -163,9 +167,13 @@ export default function VictimReportPage() {
         aiAnalysis: { label: "Text Only", confidence: 100 }
       };
 
-      await addDoc(collection(db, "reports"), reportData);
+      const docRef = await addDoc(
+        collection(db, "reports"),
+        reportData
+      );
 
       alert("✅ ส่งข้อมูลขอความช่วยเหลือสำเร็จ!");
+      router.push(`/tracking/${docRef.id}`);
 
       // Reset Form
       setDescription('');
@@ -373,7 +381,9 @@ export default function VictimReportPage() {
                       : 'bg-[#DC2626] hover:bg-[#B91C1C] active:scale-[0.99]'}`}
                 >
                   {isSubmitting ? "กำลังส่งข้อมูล..." : "ส่งข้อมูลขอความช่วยเหลือ"}
+                
                 </button>
+                
               </div>
 
             </form>
