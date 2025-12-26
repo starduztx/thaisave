@@ -27,15 +27,20 @@ export default function LandingPage() {
 
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-8 text-sm font-medium">
-            <Link href="/center" className="hover:text-yellow-400 transition">ส่วนกลาง/ศูนย์ช่วยเหลือ</Link>
+            <Link href="/center" className="hover:text-yellow-400 transition">แดชบอร์ด</Link>
             <Link href="/rescue" className="hover:text-yellow-400 transition">ช่วยเหลือ/กู้ภัย</Link>
-            <Link href="#" className="hover:text-yellow-400 transition">ติดต่อ</Link>
-            <Link href="#" className="hover:text-yellow-400 transition">เกี่ยวกับ</Link>
-            <Link href="/victim">
-              <button className="bg-white text-[#1E3A8A] px-6 py-2 rounded font-bold hover:bg-gray-100 transition shadow-sm border border-transparent hover:border-gray-300">
-                แจ้งเหตุ
-              </button>
-            </Link>
+            <div className="flex bg-white rounded-lg shadow-sm border border-transparent hover:border-gray-300 transition overflow-hidden">
+              <Link href="/victim">
+                <button className="px-4 py-2 text-[#1E3A8A] text-sm font-bold hover:bg-gray-100 transition h-full border-r border-gray-200">
+                  แจ้งเหตุ
+                </button>
+              </Link>
+              <Link href="/victim/status">
+                <button className="px-4 py-2 text-[#1E3A8A] text-sm font-bold hover:bg-gray-100 transition h-full">
+                  สถานะ
+                </button>
+              </Link>
+            </div>
           </div>
 
           {/* Mobile Menu Icon */}
@@ -127,7 +132,7 @@ export default function LandingPage() {
                 </p>
 
                 <div className="mt-auto pt-4 border-t border-gray-100">
-                  <div className="text-blue-600 font-bold flex items-center gap-2 group-hover:underline">
+                  <div className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 group-hover:bg-blue-700 transition-colors">
                     เข้าสู่ระบบกู้ภัย <ChevronRight className="w-5 h-5" />
                   </div>
                 </div>
@@ -145,20 +150,20 @@ export default function LandingPage() {
                     <Building2 className="w-9 h-9" />
                   </div>
                   <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">
-                    หน่วยงานรัฐ
+                    ดูข้อมูล
                   </span>
                 </div>
 
                 <h3 className="text-2xl font-bold text-gray-800 mb-3 group-hover:text-green-700 transition-colors">
-                  ศูนย์สั่งการ
+                  แดชบอร์ด
                 </h3>
                 <p className="text-gray-600 mb-6 flex-grow">
                   Dashboard ภาพรวมสถานการณ์ จัดสรรทรัพยากร และยืนยันข้อมูลผู้ประสบภัย
                 </p>
 
                 <div className="mt-auto pt-4 border-t border-gray-100">
-                  <div className="text-green-600 font-bold flex items-center gap-2 group-hover:underline">
-                    เข้าสู่ระบบศูนย์ฯ <ChevronRight className="w-5 h-5" />
+                  <div className="w-full bg-green-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 group-hover:bg-green-700 transition-colors">
+                    เข้าสู่หน้าแดชบอร์ด <ChevronRight className="w-5 h-5" />
                   </div>
                 </div>
               </div>

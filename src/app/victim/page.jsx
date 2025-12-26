@@ -7,9 +7,11 @@ import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic'; // จำเป็นสำหรับ Map
 import { db } from '../../lib/db';
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs } from "firebase/firestore";
 import Link from 'next/link';
+import { useRouter } from "next/navigation";
 import { ChevronLeft, MapPin, Crosshair, AlertTriangle, Send, Menu, Upload, X } from 'lucide-react';
+
 
 // Import Map แบบ Dynamic (เพื่อแก้ปัญหา Server-side Rendering)
 const MapContainer = dynamic(() => import('../../components/map/MapContainer'), {
@@ -36,6 +38,8 @@ export default function VictimReportPage() {
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [user, setUser] = useState(null);
 
+  const router = useRouter();
+
   // 1. Auto Login
   useEffect(() => {
     if (!db) return;
@@ -52,6 +56,41 @@ export default function VictimReportPage() {
       if (u) setUser(u);
     });
   }, []);
+
+  // 1.1 Auto-Check Logic (Smart Redirect)
+  // ถ้ามีเคสที่ "ยังไม่ completed" ให้ Auto Redirect ไปหน้า Status
+  useEffect(() => {
+    if (!user) return;
+
+    const checkActiveReport = async () => {
+      try {
+        const q = query(
+          collection(db, "reports"),
+          where("userId", "==", user.uid),
+          orderBy("timestamp", "desc"),
+          limit(1)
+        );
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+          const latestReport = snapshot.docs[0].data();
+          // ถ้าสถานะไม่ใช่ completed -> แสดงว่าเคสยังเปิดอยู่ -> ดีดไปหน้า Status
+          if (latestReport.status !== 'completed') {
+            // เช็คก่อนว่ามี flag 'forceNew' ใน URL ไหม (เผื่อคนอยากแจ้งจริงๆ)
+            const isForceNew = new URLSearchParams(window.location.search).get('new');
+            if (!isForceNew) {
+              console.log("Found active case, redirecting...");
+              router.push('/victim/status');
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error checking report:", error);
+      }
+    };
+
+    checkActiveReport();
+  }, [user, router]);
 
   // ฟังก์ชัน: เมื่อเลือกจุดบนแผนที่
   const handleMapSelect = (newLat, newLng) => {
@@ -124,7 +163,6 @@ export default function VictimReportPage() {
   // 2. Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!user) {
       alert("⚠️ กำลังเชื่อมต่อระบบ... กรุณารอสักครู่");
       return;
@@ -156,6 +194,7 @@ export default function VictimReportPage() {
         latitude: lat,            // ส่งแยก field ไปด้วยเผื่อใช้ทำแผนที่รวม
         longitude: lng,
         contactName,
+        contactPhone,
         status: 'pending',
         timestamp: serverTimestamp(),
         imageUrl: base64Image,
@@ -163,9 +202,13 @@ export default function VictimReportPage() {
         aiAnalysis: { label: "Text Only", confidence: 100 }
       };
 
-      await addDoc(collection(db, "reports"), reportData);
+      const docRef = await addDoc(
+        collection(db, "reports"),
+        reportData
+      );
 
       alert("✅ ส่งข้อมูลขอความช่วยเหลือสำเร็จ!");
+      router.push(`/victim/status`);
 
       // Reset Form
       setDescription('');
@@ -203,10 +246,8 @@ export default function VictimReportPage() {
 
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-8 text-sm font-medium">
-            <Link href="/center" className="hover:text-yellow-400 transition">ส่วนกลาง/ศูนย์ช่วยเหลือ</Link>
+            <Link href="/center" className="hover:text-yellow-400 transition">แดชบอร์ด</Link>
             <Link href="/rescue" className="hover:text-yellow-400 transition">ช่วยเหลือ/กู้ภัย</Link>
-            <Link href="#" className="hover:text-yellow-400 transition">ติดต่อ</Link>
-            <Link href="#" className="hover:text-yellow-400 transition">เกี่ยวกับ</Link>
             <button className="bg-white text-[#1E3A8A] px-6 py-2 rounded font-bold hover:bg-gray-100 transition shadow-sm">
               แจ้งเหตุ
             </button>
@@ -222,7 +263,7 @@ export default function VictimReportPage() {
       {/* 2. Main Content (พื้นที่เนื้อหา) */}
       <div className="flex-grow w-full py-8 px-4 md:px-8">
 
-        <div className="w-full max-w-[1600px] mx-auto">
+        <div className="w-full max-w-7xl mx-auto">
           {/* หัวข้อหน้า */}
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
             แจ้งเหตุขอความช่วยเหลือด่วน
@@ -373,7 +414,9 @@ export default function VictimReportPage() {
                       : 'bg-[#DC2626] hover:bg-[#B91C1C] active:scale-[0.99]'}`}
                 >
                   {isSubmitting ? "กำลังส่งข้อมูล..." : "ส่งข้อมูลขอความช่วยเหลือ"}
+
                 </button>
+
               </div>
 
             </form>
