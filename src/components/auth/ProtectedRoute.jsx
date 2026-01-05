@@ -11,14 +11,20 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     useEffect(() => {
         // Wait for loading to finish before making any decisions
         if (!loading) {
+            console.log(`[ProtectedRoute] Checking Path: ${window.location.pathname} | User Role: ${user?.role} | Allowed: ${allowedRoles}`);
             if (!user) {
                 // No user found -> Redirect to login
+                console.log("[ProtectedRoute] No user -> Redirect to /login");
                 router.push("/login");
             } else if (allowedRoles && !allowedRoles.includes(user.role)) {
                 // User exists but wrong role -> Redirect based on their actual role
-                if (user.role === 'rescue') router.push('/rescue');
+                console.log(`[ProtectedRoute] Access Denied. Role '${user.role}' not in [${allowedRoles}]`);
+                if (user.role === 'rescue') router.push('/center');
                 else if (user.role === 'center') router.push('/center');
-                else router.push('/victim');
+                else if (user.role === 'pending') router.push('/pending-approval');
+                else router.push('/');
+            } else {
+                console.log("[ProtectedRoute] Access Granted");
             }
         }
     }, [user, loading, router, allowedRoles]);

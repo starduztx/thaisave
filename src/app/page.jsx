@@ -7,7 +7,20 @@
 import { ShieldAlert, Building2, ChevronRight, Siren, Menu } from 'lucide-react';
 import Link from 'next/link';
 
+// ... (previous imports)
+import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { LogOut } from 'lucide-react';
+
 export default function LandingPage() {
+  const { user, logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await logout();
+    router.refresh();
+  };
+
   return (
     <div className="min-h-screen flex flex-col font-sans bg-slate-50">
 
@@ -27,6 +40,15 @@ export default function LandingPage() {
 
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-8 text-sm font-medium">
+            {user && (user.isAnonymous || user.role === 'victim') && (
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded transition"
+              >
+                <LogOut size={16} />
+                <span>ออกจากระบบ (ผู้เยี่ยมชม)</span>
+              </button>
+            )}
             <Link href="/center" className="hover:text-yellow-400 transition">แดชบอร์ด</Link>
             <Link href="/rescue" className="hover:text-yellow-400 transition">ช่วยเหลือ/กู้ภัย</Link>
             <div className="flex bg-white rounded-lg shadow-sm border border-transparent hover:border-gray-300 transition overflow-hidden">

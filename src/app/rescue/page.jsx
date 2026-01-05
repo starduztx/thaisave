@@ -161,8 +161,19 @@ export default function RescueDashboard() {
   const [chatReport, setChatReport] = useState(null);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { user, logout } = useAuth();
+  const { user, logout, loading: authLoading } = useAuth();
   const router = useRouter();
+
+  // Guard: Protect Rescue Page
+  useEffect(() => {
+    if (authLoading) return; // Wait for auth to load
+    if (user) {
+      if (user.role === 'pending') router.push('/pending-approval');
+      if (user.role === 'victim') router.push('/login'); // Anonymous users must login to access rescue
+    } else {
+      router.push('/login');
+    }
+  }, [user, authLoading, router]);
 
   const handleLogout = async () => { try { await logout(); router.push('/login'); } catch (error) { console.error("Logout failed", error); } };
 

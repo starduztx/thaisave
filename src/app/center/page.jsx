@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { Menu, ChevronDown } from 'lucide-react';
-import { db, auth } from '../../lib/db';
+import { Menu, ChevronDown, MapPin as MapPinIcon } from 'lucide-react'; // อย่าลืม import MapPinIcon
+import { db } from '../../lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, limit } from "firebase/firestore";
 
 // Import Map แบบ Dynamic
 const MapContainer = dynamic(() => import('../../components/map/MapContainer'), {
@@ -16,11 +16,82 @@ const MapContainer = dynamic(() => import('../../components/map/MapContainer'), 
 
 import PolicyReport from '../../components/dashboard/PolicyReport';
 
+// --- Sub-Component: แปลงพิกัดเป็นชื่อจังหวัด ---
+const LocationDisplay = ({ lat, lng, text }) => {
+  const [province, setProvince] = useState(text || 'กำลังระบุพิกัด...');
+
+  useEffect(() => {
+    // ถ้ามีคำว่า จ. หรือ จังหวัด อยู่แล้ว ให้ใช้ text เดิมเลย
+    if (text && (text.includes("จ.") || text.includes("จังหวัด"))) {
+      setProvince(text);
+      return;
+    }
+
+    // 2. เตรียมพิกัด (รองรับทั้งแยก Field และรวมใน String)
+    let targetLat = lat;
+    let targetLng = lng;
+
+    if ((!targetLat || !targetLng) && text && text.includes(',')) {
+      const parts = text.split(',').map(s => parseFloat(s.trim()));
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        targetLat = parts[0];
+        targetLng = parts[1];
+      }
+    }
+
+    // 3. ยิง API ถ้ามีพิกัด
+    if (targetLat && targetLng) {
+      setProvince("กำลังระบุพิกัด...");
+
+      // Primary: BigDataCloud
+      fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${targetLat}&longitude=${targetLng}&localityLanguage=th`)
+        .then(res => {
+          if (!res.ok) throw new Error("BDC Error");
+          return res.json();
+        })
+        .then(data => {
+          if (data.principalSubdivision) {
+            setProvince(data.principalSubdivision.replace("จังหวัด", "จ.").trim());
+          } else {
+            throw new Error("No Province Data");
+          }
+        })
+        .catch(() => {
+          // Fallback: Nominatim (OpenStreetMap)
+          fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetLat}&lon=${targetLng}&zoom=10&accept-language=th`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.address && data.address.province) {
+                setProvince(data.address.province.replace("จังหวัด", "จ.").trim());
+              } else {
+                setProvince(`${targetLat.toFixed(3)}, ${targetLng.toFixed(3)}`);
+              }
+            })
+            .catch(() => setProvince(`${targetLat.toFixed(3)}, ${targetLng.toFixed(3)}`));
+        });
+    } else {
+      // 4. ถ้าไม่มีข้อมูลอะไรเลย
+      setProvince(text || "ไม่ระบุพิกัด");
+    }
+  }, [lat, lng, text]);
+
+  return <span>{province}</span>;
+};
+
+// --- Helper: ซ่อนเบอร์โทร 4 ตัวท้าย ---
+const maskPhone = (phone) => {
+  if (!phone) return '-';
+  if (phone.length < 4) return phone;
+  return phone.slice(0, -4) + "xxxx";
+};
+
 export default function CenterDashboardPage() {
   const [reports, setReports] = useState([]);
   const [showCaseList, setShowCaseList] = useState(true);
-  const { user, logout } = useAuth(); // Use Global Auth
+  const { user, logout } = useAuth();
   const router = useRouter();
+  const [filterType, setFilterType] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
 
   const handleLogout = async () => {
     try {
@@ -31,12 +102,27 @@ export default function CenterDashboardPage() {
     }
   };
 
-  // Removed redundant local auth effect
+  const filteredReports = reports.filter((item) => {
+    const typeValue = item.disasterType || '';
+    const matchType = filterType === 'all' || typeValue.includes(filterType);
 
+    let matchStatus = true;
+    if (filterStatus === 'pending') {
+      matchStatus = ['pending', 'approved', 'accepted'].includes(item.status);
+    } else if (filterStatus === 'completed') {
+      matchStatus = item.status === 'completed';
+    }
+    return matchType && matchStatus;
+  });
 
   useEffect(() => {
     if (!user || !db) return;
-    const q = query(collection(db, 'reports'), orderBy('timestamp', 'desc'));
+    const q = query(
+      collection(db, 'reports'),
+      orderBy('timestamp', 'desc'),
+      limit(50)
+    );
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setReports(items);
@@ -44,15 +130,10 @@ export default function CenterDashboardPage() {
     return () => unsubscribe();
   }, [user]);
 
-  // ฟังก์ชันเปลี่ยนสถานะ (Manual Approve)
   const updateStatus = async (id, currentStatus) => {
-    // ถ้าสถานะเป็น Accepted หรือ Completed แล้ว อาจจะไม่ต้องทำอะไร หรือให้ Reset กลับได้
-    // Logic: Toggle Approve <-> Pending
     const isAlreadyGreen = ['approved', 'accepted', 'completed'].includes(currentStatus);
     const newStatus = isAlreadyGreen ? 'pending' : 'approved';
-
     if (!confirm(`ยืนยันการเปลี่ยนสถานะเป็น ${newStatus === 'approved' ? 'อนุมัติ' : 'รอตรวจสอบ'}?`)) return;
-
     try {
       await updateDoc(doc(db, 'reports', id), { status: newStatus });
     } catch (e) {
@@ -61,10 +142,8 @@ export default function CenterDashboardPage() {
     }
   };
 
-  // Helper: ตรวจสอบสถานะที่เป็น "สีเขียว" (ปกติ/ดำเนินการแล้ว)
   const isGreenStatus = (status) => ['approved', 'accepted', 'completed'].includes(status);
 
-  // Helper: ข้อความสถานะ
   const getStatusLabel = (status) => {
     switch (status) {
       case 'approved': return 'อนุมัติแล้ว';
@@ -76,10 +155,8 @@ export default function CenterDashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-10">
-      {/* 1. Header (Navbar) แบบเต็มจอ สีน้ำเงินเข้ม (เหมือนหน้า Victim) */}
       <nav className="bg-[#1E3A8A] text-white w-full shadow-md sticky top-0 z-50">
         <div className="w-full px-6 py-4 flex justify-between items-center">
-          {/* Brand */}
           <div className="flex flex-col">
             <Link href="/" className="text-2xl font-bold tracking-tight hover:opacity-90 transition">
               ThaiSave(ไทยเซฟ)
@@ -89,11 +166,9 @@ export default function CenterDashboardPage() {
             </span>
           </div>
 
-          {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-8 text-sm font-medium">
             <span className="text-yellow-400 font-bold border-b-2 border-yellow-400 pb-1 cursor-default">แดชบอร์ด</span>
             <Link href="/rescue" className="hover:text-yellow-400 transition opacity-80 hover:opacity-100">ช่วยเหลือ/กู้ภัย</Link>
-
             <button
               onClick={handleLogout}
               className="text-white hover:text-white/80 transition font-medium bg-red-500 hover:bg-red-600 px-4 py-1.5 rounded-lg shadow-sm"
@@ -101,11 +176,7 @@ export default function CenterDashboardPage() {
               ออกจากระบบ
             </button>
           </div>
-
-          {/* Mobile Menu Icon */}
-          <button className="md:hidden text-white">
-            <Menu size={28} />
-          </button>
+          <button className="md:hidden text-white"><Menu size={28} /></button>
         </div>
       </nav>
 
@@ -114,39 +185,50 @@ export default function CenterDashboardPage() {
           <h2 className="text-3xl font-bold text-gray-900">Dashboard ภาพรวมประเทศ</h2>
         </div>
 
-        {/* 1. Map Section (ภาพรวม) */}
+        {/* 1. Map Section */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-medium text-gray-800">แผนที่ประเทศไทย</h3>
+            <h3 className="text-xl font-medium text-gray-800">
+              แผนที่ประเทศไทย ({filteredReports.length} เคส)
+            </h3>
+
             <div className="flex gap-3">
               <div className="relative">
-                <select className="appearance-none bg-white border border-gray-300 rounded px-4 py-2 pr-8 text-sm focus:outline-none focus:border-blue-500 w-40">
-                  <option>ประเภทภัยพิบัติ</option>
-                  <option>น้ำท่วม</option>
-                  <option>ไฟไหม้</option>
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="appearance-none bg-white border border-gray-300 rounded px-4 py-2 pr-8 text-sm focus:outline-none focus:border-blue-500 w-40"
+                >
+                  <option value="all">ทุกประเภทภัย</option>
+                  <option value="น้ำท่วม">น้ำท่วม</option>
+                  <option value="ไฟไหม้">ไฟไหม้</option>
+                  <option value="ดินถล่ม">ดินถล่ม</option>
                 </select>
                 <ChevronDown className="absolute right-2 top-2.5 text-gray-500 pointer-events-none" size={16} />
               </div>
+
               <div className="relative">
-                <select className="appearance-none bg-white border border-gray-300 rounded px-4 py-2 pr-8 text-sm focus:outline-none focus:border-blue-500 w-32">
-                  <option>สถานะ</option>
-                  <option>รออนุมัติ</option>
-                  <option>ดำเนินการแล้ว</option>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="appearance-none bg-white border border-gray-300 rounded px-4 py-2 pr-8 text-sm focus:outline-none focus:border-blue-500 w-40"
+                >
+                  <option value="all">สถานะทั้งหมด</option>
+                  <option value="pending">กำลังดำเนินการ</option>
+                  <option value="completed">เสร็จสิ้นแล้ว</option>
                 </select>
                 <ChevronDown className="absolute right-2 top-2.5 text-gray-500 pointer-events-none" size={16} />
               </div>
             </div>
           </div>
-
-          {/* Real Map Component */}
           <div className="h-[400px] w-full border border-gray-300 rounded-lg overflow-hidden relative z-0">
-            <MapContainer reports={reports} />
+            <MapContainer reports={filteredReports} />
           </div>
         </div>
 
-        {/* 2. Case List Header */}
+        {/* 2. Case List (Updated UI - Bigger Cards) */}
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-2xl font-bold text-gray-800">ภาพรวมเคส</h3>
+          <h3 className="text-2xl font-bold text-gray-800">ภาพรวมเคส ({filteredReports.length})</h3>
           <button
             onClick={() => setShowCaseList(!showCaseList)}
             className="bg-white border border-gray-300 px-4 py-1.5 rounded shadow-sm text-sm font-medium hover:bg-gray-50 text-gray-700 transition"
@@ -155,84 +237,76 @@ export default function CenterDashboardPage() {
           </button>
         </div>
 
-        {/* Case List */}
-        <div className="space-y-4">
-          {showCaseList && (
-            reports.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl border border-gray-200 shadow-sm">
-                <p className="text-gray-500">ยังไม่มีการแจ้งเหตุเข้ามาในระบบ</p>
-              </div>
-            ) : reports.map(item => (
-              <div key={item.id} className={`bg-white p-6 rounded-xl shadow-sm border flex flex-col md:flex-row gap-6 relative overflow-hidden transition-all ${isGreenStatus(item.status) ? 'border-green-200 bg-green-50/30' : 'border-gray-200'
-                }`}>
-                {/* Visual Status Indicator Line (Left Border) */}
-                <div className={`absolute left-0 top-0 bottom-0 w-1 ${isGreenStatus(item.status) ? 'bg-green-500' : 'bg-[#EF4444]'}`}></div>
+        {showCaseList && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="h-[600px] overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
 
-                <div className="flex-grow pl-2">
-                  {/* Header: Type and Location */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded ${isGreenStatus(item.status)
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-red-100 text-red-600'
-                      }`}>
-                      {getStatusLabel(item.status)}
-                    </span>
-                    <span className="text-gray-500 text-sm">
-                      {item.location || 'ไม่ระบุพิกัด'}
-                    </span>
-                  </div>
+              {filteredReports.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-gray-500">
+                  <p>ไม่พบข้อมูลตามเงื่อนไขที่เลือก</p>
+                </div>
+              ) : (
+                filteredReports.map(item => (
+                  <div key={item.id} className={`p-5 rounded-xl border flex flex-col md:flex-row gap-4 relative overflow-hidden transition-all hover:shadow-md items-start md:items-center ${isGreenStatus(item.status) ? 'border-green-200 bg-green-50/30' : 'border-gray-200 bg-white'
+                    }`}>
+                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isGreenStatus(item.status) ? 'bg-green-500' : 'bg-[#EF4444]'}`}></div>
 
-                  {/* Title & Contact */}
-                  <h4 className="text-lg font-bold text-gray-900 mb-1">
-                    {item.disasterType} {item.contactName ? `ผู้แจ้ง: ${item.contactName}` : ''}
-                  </h4>
-                  <p className="text-xs text-gray-500 mb-3">
-                    ผู้แจ้ง: คุณ {item.contactName || '-'} ({item.contactPhone || '-'})
-                  </p>
+                    {/* Left: Info */}
+                    <div className="flex-grow pl-3 flex flex-col justify-center gap-2">
+                      {/* Row 1: Status & Location */}
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md ${isGreenStatus(item.status) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                          {getStatusLabel(item.status)}
+                        </span>
+                        <span className="text-gray-500 text-sm flex items-center gap-1">
+                          <MapPinIcon size={14} />
+                          <LocationDisplay lat={item.latitude} lng={item.longitude} text={item.location} />
+                        </span>
+                      </div>
 
-                  {/* Description Box */}
-                  <div className="bg-gray-100/80 rounded p-3 mb-4 text-sm text-gray-700">
-                    "{item.description}"
-                  </div>
+                      {/* Row 2: Title (Bigger) */}
+                      <h4 className="text-lg font-bold text-gray-900 leading-tight">
+                        {item.disasterType}
+                      </h4>
 
-                  {/* Images & Map Link */}
-                  <div className="flex gap-4 items-center">
-                    <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-[10px] text-gray-500">
-                      บันทึก<br />หลักฐาน
+                      {/* Row 3: Contact Info (Split Lines) */}
+                      <div className="flex flex-col gap-1 text-sm text-gray-600 mt-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium min-w-[60px]">ผู้แจ้ง:</span>
+                          <span>{item.contactName || '-'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium min-w-[60px]">เบอร์โทร:</span>
+                          <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-mono text-xs">
+                            {maskPhone(item.contactPhone)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <a
-                      href={`https://www.google.com/maps?q=${item.latitude},${item.longitude}`}
-                      target="_blank"
-                      className="text-blue-600 text-xs underline font-medium"
-                    >
-                      ดูพิกัดบนแผนที่
-                    </a>
+
+                    {/* Right: Action Button & Date */}
+                    <div className="flex flex-row md:flex-col justify-between items-center md:items-end w-full md:w-auto gap-3 pl-3 md:pl-0 border-t md:border-t-0 border-gray-100 pt-3 md:pt-0 mt-2 md:mt-0">
+
+                      <button
+                        onClick={() => updateStatus(item.id, item.status)}
+                        className={`px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm transition-colors whitespace-nowrap ${isGreenStatus(item.status) ? 'bg-[#10B981] text-white hover:bg-[#059669]' : 'bg-[#FDE68A] text-[#92400E] hover:bg-yellow-200'}`}
+                      >
+                        {isGreenStatus(item.status) ? '✓ อนุมัติแล้ว' : 'รอตรวจสอบ'}
+                      </button>
+
+                      <span className="text-xs text-gray-400">
+                        {item.timestamp ? new Date(item.timestamp.seconds * 1000).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                      </span>
+                    </div>
+
                   </div>
-                </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
-                {/* Right Action Button */}
-                <div className="flex flex-col justify-start items-end min-w-[150px]">
-                  <button
-                    onClick={() => updateStatus(item.id, item.status)}
-                    className={`px-6 py-1.5 rounded-full text-sm font-bold shadow-sm transition-colors ${isGreenStatus(item.status)
-                      ? 'bg-[#10B981] text-white hover:bg-[#059669]' // Green button
-                      : 'bg-[#FDE68A] text-[#92400E] hover:bg-yellow-200'
-                      }`}
-                  >
-                    {isGreenStatus(item.status) ? 'อนุมัติเรียบร้อย' : 'รออนุมัติ'}
-                  </button>
-                  {isGreenStatus(item.status) && (
-                    <span className="text-[10px] text-green-600 mt-2 font-medium">
-                      {item.status === 'accepted' ? 'กู้ภัยกำลังเดินทาง' : item.status === 'completed' ? 'ช่วยเหลือสำเร็จ' : 'เจ้าหน้าที่รับเรื่องแล้ว'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Policy Report Section (Moved to bottom) */}
+        {/* Policy Report Section */}
         <div className="mt-12 border-t pt-8">
           <PolicyReport reports={reports} />
         </div>

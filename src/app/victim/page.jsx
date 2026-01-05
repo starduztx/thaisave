@@ -44,17 +44,21 @@ export default function VictimReportPage() {
   useEffect(() => {
     if (!db) return;
     const auth = getAuth(db.app);
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.error("Login Error:", error);
+
+    // Check if user is already signed in
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        // User is already signed in (Admin or existing Anonymous) -> Use it
+        setUser(currentUser);
+      } else {
+        // No user -> Sign in Anonymously
+        signInAnonymously(auth).catch((error) => {
+          console.error("Login Error:", error);
+        });
       }
-    };
-    initAuth();
-    onAuthStateChanged(auth, (u) => {
-      if (u) setUser(u);
     });
+
+    return () => unsubscribe();
   }, []);
 
   // 1.1 Auto-Check Logic (Smart Redirect)
@@ -314,6 +318,21 @@ export default function VictimReportPage() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="เช่น น้ำท่วมถึงชั้น 2, มีผู้ป่วยติดเตียง 1 คน, เด็ก 2 คน, อาหารหมดแล้ว"
+                  className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+                  required
+                />
+              </div>
+
+              {/* Row 2.5: ชื่อผู้ติดต่อ */}
+              <div>
+                <label className="block text-gray-700 font-bold mb-2">
+                  ชื่อผู้แจ้ง
+                </label>
+                <input
+                  type="text"
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  placeholder="ระบุชื่อของคุณ"
                   className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
                   required
                 />
