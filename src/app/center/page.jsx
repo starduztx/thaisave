@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { Menu, ChevronDown, MapPin as MapPinIcon } from 'lucide-react'; // อย่าลืม import MapPinIcon
+import { Menu, ChevronDown, MapPin as MapPinIcon, User } from 'lucide-react'; // อย่าลืม import MapPinIcon
 import { db } from '../../lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -15,6 +15,7 @@ const MapContainer = dynamic(() => import('../../components/map/MapContainer'), 
 });
 
 import PolicyReport from '../../components/dashboard/PolicyReport';
+import Navbar from '../../components/Navbar';
 
 // --- Sub-Component: แปลงพิกัดเป็นชื่อจังหวัด ---
 const LocationDisplay = ({ lat, lng, text }) => {
@@ -90,6 +91,7 @@ export default function CenterDashboardPage() {
   const [showCaseList, setShowCaseList] = useState(true);
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [isProfileOpen, setProfileOpen] = useState(false);
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
 
@@ -142,43 +144,16 @@ export default function CenterDashboardPage() {
     }
   };
 
-  const isGreenStatus = (status) => ['approved', 'accepted', 'completed'].includes(status);
+  const isGreenStatus = (status) => status === 'completed';
 
   const getStatusLabel = (status) => {
-    switch (status) {
-      case 'approved': return 'อนุมัติแล้ว';
-      case 'accepted': return 'กู้ภัยรับเรื่องแล้ว';
-      case 'completed': return 'ช่วยเหลือสำเร็จ';
-      default: return 'วิกฤต / รอความช่วยเหลือ';
-    }
+    if (status === 'completed') return 'เสร็จสิ้น';
+    return 'รอตรวจสอบ';
   };
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-10">
-      <nav className="bg-[#1E3A8A] text-white w-full shadow-md sticky top-0 z-50">
-        <div className="w-full px-6 py-4 flex justify-between items-center">
-          <div className="flex flex-col">
-            <Link href="/" className="text-2xl font-bold tracking-tight hover:opacity-90 transition">
-              ThaiSave(ไทยเซฟ)
-            </Link>
-            <span className="text-[11px] text-blue-200 font-light tracking-widest opacity-80">
-              ระบบกลางจัดการภัยพิบัติแห่งชาติ
-            </span>
-          </div>
-
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium">
-            <span className="text-yellow-400 font-bold border-b-2 border-yellow-400 pb-1 cursor-default">แดชบอร์ด</span>
-            <Link href="/rescue" className="hover:text-yellow-400 transition opacity-80 hover:opacity-100">ช่วยเหลือ/กู้ภัย</Link>
-            <button
-              onClick={handleLogout}
-              className="text-white hover:text-white/80 transition font-medium bg-red-500 hover:bg-red-600 px-4 py-1.5 rounded-lg shadow-sm"
-            >
-              ออกจากระบบ
-            </button>
-          </div>
-          <button className="md:hidden text-white"><Menu size={28} /></button>
-        </div>
-      </nav>
+      <Navbar activePage="center" />
 
       <main className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="flex justify-between items-end mb-6">
@@ -214,8 +189,8 @@ export default function CenterDashboardPage() {
                   className="appearance-none bg-white border border-gray-300 rounded px-4 py-2 pr-8 text-sm focus:outline-none focus:border-blue-500 w-40"
                 >
                   <option value="all">สถานะทั้งหมด</option>
-                  <option value="pending">กำลังดำเนินการ</option>
-                  <option value="completed">เสร็จสิ้นแล้ว</option>
+                  <option value="pending">รอตรวจสอบ</option>
+                  <option value="completed">เสร็จสิ้น</option>
                 </select>
                 <ChevronDown className="absolute right-2 top-2.5 text-gray-500 pointer-events-none" size={16} />
               </div>
@@ -291,7 +266,7 @@ export default function CenterDashboardPage() {
                         onClick={() => updateStatus(item.id, item.status)}
                         className={`px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm transition-colors whitespace-nowrap ${isGreenStatus(item.status) ? 'bg-[#10B981] text-white hover:bg-[#059669]' : 'bg-[#FDE68A] text-[#92400E] hover:bg-yellow-200'}`}
                       >
-                        {isGreenStatus(item.status) ? '✓ อนุมัติแล้ว' : 'รอตรวจสอบ'}
+                        {isGreenStatus(item.status) ? '✓ เสร็จสิ้น' : 'รอตรวจสอบ'}
                       </button>
 
                       <span className="text-xs text-gray-400">

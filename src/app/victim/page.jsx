@@ -164,6 +164,31 @@ export default function VictimReportPage() {
     );
   };
 
+  // ฟังก์ชันแปลงพิกัดเป็นชื่อจังหวัด (ใช้ OpenStreetMap)
+  const getProvinceFromLatLong = async (lat, lng) => {
+    try {
+      // ✅ ใช้ zoom=18 เพื่อได้ข้อมูล address ครบทุกระดับชั้น (ตั้งแต่บ้านเลขที่ยันจังหวัด)
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&accept-language=th`
+      );
+      if (!res.ok) throw new Error("Network response was not ok");
+      const data = await res.json();
+
+      if (data.address) {
+        // ลำดับความสำคัญการแสดงผล: จังหวัด (state) -> จังหวัด (province) -> เมือง (city) -> ไม่ระบุ
+        const state = data.address.state || data.address.province;
+        if (state) {
+          return state.replace("จังหวัด", "").trim(); // ตัดคำว่า จังหวัด ออกให้สั้นกระชับ
+        }
+        return data.address.city || "ไม่ระบุ";
+      }
+      return "ไม่ระบุ";
+    } catch (error) {
+      console.error("Error fetching province:", error);
+      return "ไม่ระบุ";
+    }
+  };
+
   // 2. Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -183,23 +208,32 @@ export default function VictimReportPage() {
     setIsSubmitting(true);
 
     try {
-      let base64Image = null;
+      const currentLat = parseFloat(lat);
+      const currentLng = parseFloat(lng);
 
+      let provinceName = "ไม่ระบุ";
+      if (lat && lng) {
+        provinceName = await getProvinceFromLatLong(lat, lng);
+        console.log("ตำแหน่งนี้อยู่จังหวัด:", provinceName);
+      }
+      let base64Image = null;
       // แปลงรูปเป็น Base64 ถ้ามี
       if (selectedFile) {
         base64Image = await convertToBase64(selectedFile);
       }
+
 
       const reportData = {
         userId: user.uid,
         disasterType,
         description,
         location: locationString, // ส่ง string ที่โชว์ใน box
-        latitude: lat,            // ส่งแยก field ไปด้วยเผื่อใช้ทำแผนที่รวม
-        longitude: lng,
+        latitude: currentLat,            // ส่งแยก field ไปด้วยเผื่อใช้ทำแผนที่รวม
+        longitude: currentLng,
         contactName,
         contactPhone,
-        status: 'pending',
+        province: provinceName,
+        status: 'investigating',
         timestamp: serverTimestamp(),
         imageUrl: base64Image,
         hasImage: !!selectedFile,
@@ -231,6 +265,8 @@ export default function VictimReportPage() {
       setIsSubmitting(false);
     }
   };
+
+
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-white">

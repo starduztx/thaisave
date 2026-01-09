@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { db } from "@/lib/db";
-import { collection, query, where, onSnapshot, doc, updateDoc, orderBy } from "firebase/firestore";
-import { Check, X, Shield, User } from "lucide-react";
+import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, deleteDoc } from "firebase/firestore";
+import { Check, X, Shield, User, Trash2 } from "lucide-react";
 
 export default function AdminPage() {
     const [pendingUsers, setPendingUsers] = useState([]);
@@ -48,6 +48,17 @@ export default function AdminPage() {
         } catch (error) {
             console.error(error);
             alert("เกิดข้อผิดพลาด: " + error.message);
+        }
+    };
+
+    const handleDeleteUser = async (userId, userName) => {
+        if (!confirm(`⚠️ คำเตือน: คุณต้องการลบผู้ใช้ "${userName}" ออกจากระบบถาวรใช่หรือไม่?\n\nข้อมูลใน Database จะหายไปและกู้คืนไม่ได้!`)) return;
+
+        try {
+            await deleteDoc(doc(db, "users", userId));
+        } catch (error) {
+            console.error(error);
+            alert("เกิดข้อผิดพลาดในการลบ: " + error.message);
         }
     };
 
@@ -101,15 +112,24 @@ export default function AdminPage() {
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => handleApprove(user.id, user.name)}
-                                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1"
+                                                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1"
+                                                    title="อนุมัติ"
                                                 >
                                                     <Check size={14} /> อนุมัติ
                                                 </button>
                                                 <button
                                                     onClick={() => handleReject(user.id, user.name)}
-                                                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1"
+                                                    className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1"
+                                                    title="ปฏิเสธ (เก็บประวัติ)"
                                                 >
                                                     <X size={14} /> ปฏิเสธ
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteUser(user.id, user.name)}
+                                                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1"
+                                                    title="ลบทิ้งถาวร"
+                                                >
+                                                    <Trash2 size={14} /> ลบ
                                                 </button>
                                             </div>
                                         </td>
@@ -121,16 +141,56 @@ export default function AdminPage() {
                 </div>
             </div>
 
-            {/* Approved List (Collapsible or just list) */}
+            {/* Rescue Officers List */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
                     <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                         <Shield className="w-5 h-5 text-green-600" /> เจ้าหน้าที่กู้ภัย ({activeUsers.filter(u => u.role === 'rescue').length})
                     </h2>
                 </div>
-                {/* Simple list of approved users could go here, for now keeping it collapsed/simple */}
-                <div className="p-6 text-sm text-gray-500">
-                    มีเจ้าหน้าที่กู้ภัยทั้งหมด {activeUsers.filter(u => u.role === 'rescue').length} คน (และ Admin {activeUsers.filter(u => u.role === 'center').length} คน)
+
+                <div className="p-0">
+                    {activeUsers.filter(u => u.role === 'rescue').length === 0 ? (
+                        <div className="p-8 text-center text-gray-400">ยังไม่มีเจ้าหน้าที่กู้ภัยในระบบ</div>
+                    ) : (
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                                <tr>
+                                    <th className="px-6 py-3 font-medium">ชื่อเจ้าหน้าที่</th>
+                                    <th className="px-6 py-3 font-medium">อีเมล</th>
+                                    <th className="px-6 py-3 font-medium">วันที่เข้าร่วม</th>
+                                    <th className="pl-6 pr-6 py-3 font-medium text-right">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {activeUsers.filter(u => u.role === 'rescue').map((user) => (
+                                    <tr key={user.id} className="hover:bg-gray-50 transition">
+                                        <td className="px-6 py-4 font-medium text-gray-900 flex items-center gap-3">
+                                            {user.photoURL ? (
+                                                <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full" />
+                                            ) : (
+                                                <div className="w-8 h-8 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center text-xs font-bold">R</div>
+                                            )}
+                                            {user.name || "ไม่ระบุชื่อ"}
+                                        </td>
+                                        <td className="px-6 py-4 text-gray-600 text-sm">{user.email}</td>
+                                        <td className="px-6 py-4 text-gray-400 text-xs">
+                                            {user.createdAt ? new Date(user.createdAt).toLocaleDateString('th-TH') : '-'}
+                                        </td>
+                                        <td className="pl-6 pr-6 py-4 text-right">
+                                            <button
+                                                onClick={() => handleDeleteUser(user.id, user.name)}
+                                                className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition"
+                                                title="ลบผู้ใช้"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
             </div>
         </main>
