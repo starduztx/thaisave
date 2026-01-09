@@ -59,7 +59,6 @@ export const AuthProvider = ({ children }) => {
                     "kittithatchaichana@gmail.com",
                     "thanachai.bo2546@gmail.com",
                     "starnng@gmail.com",
-                    "65011211006@msu.ac.th"
                 ];
                 const role = adminEmails.includes(user.email) ? "center" : "pending";
 

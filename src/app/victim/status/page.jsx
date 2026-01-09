@@ -2,13 +2,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { db } from '../../../lib/db';
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, query, where, orderBy, limit, onSnapshot, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+// ✅ เพิ่ม increment ใน import
+import { collection, query, where, orderBy, limit, onSnapshot, doc, updateDoc, serverTimestamp, increment } from "firebase/firestore";
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Send, MessageCircle, UserCheck, Handshake, Truck, Home, ShieldCheck, FileText, X, Menu } from 'lucide-react';
 import Footer from '../../../components/Footer';
+import dynamic from 'next/dynamic';
 
-// ฟังก์ชันแยกข้อความ (Utility)
+
+
+// ฟังก์ชันแยกข้อความ (Utility) - เหมือนเดิม
 const parseReportData = (fullDescription) => {
   if (!fullDescription) return { cleanDesc: "", chatLogs: [] };
 
@@ -30,8 +34,8 @@ const parseReportData = (fullDescription) => {
         const timeMatch = meta.match(/(\d{2}:\d{2})/);
         time = timeMatch ? timeMatch[0] : "";
 
-        if (meta.includes("ผู้ประสบภัย")) sender = "me"; // ฝั่งเรา (User)
-        else sender = "officer"; // ฝั่งเจ้าหน้าที่
+        if (meta.includes("ผู้ประสบภัย")) sender = "me"; 
+        else sender = "officer"; 
       }
       chatLogs.push({ sender, time, message, original: part });
     } else {
@@ -42,6 +46,12 @@ const parseReportData = (fullDescription) => {
   return { cleanDesc: cleanDescParts.join('\n\n'), chatLogs };
 };
 
+// ✅ Import Map แบบ Dynamic (เพื่อแก้ปัญหา window is not defined)
+const LiveTrackingMap = dynamic(() => import('../../../components/map/LiveTrackingMap'), {
+  ssr: false,
+  loading: () => <div className="w-full h-[300px] bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400">กำลังโหลดแผนที่...</div>
+});
+
 export default function TrackingPage() {
   const [user, setUser] = useState(null);
   const [myReport, setMyReport] = useState(null);
@@ -49,7 +59,7 @@ export default function TrackingPage() {
   const router = useRouter();
 
   // State Chat
-  const [isChatOpen, setIsChatOpen] = useState(false); // Default Closed
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const chatBottomRef = useRef(null);
@@ -91,10 +101,19 @@ export default function TrackingPage() {
     }
   }, [isChatOpen, myReport, isSending]);
 
+  // ✅ LOGIC ใหม่: เมื่อเปิดแชท ให้ล้างจำนวนข้อความที่ยังไม่อ่านของฝั่งเรา (unreadForVictim = 0)
+  useEffect(() => {
+    if (isChatOpen && myReport && myReport.unreadForVictim > 0) {
+        const reportRef = doc(db, "reports", myReport.id);
+        updateDoc(reportRef, { unreadForVictim: 0 }).catch(err => console.error("Clear badge error", err));
+    }
+  }, [isChatOpen, myReport]);
+
   const getCurrentStepIndex = (status) => {
     if (status === 'completed') return 5;
     if (status === 'traveling') return 4;
     if (status === 'accepted') return 3;
+    if (status === 'investigating') return 2;
     return 1;
   };
 
@@ -102,7 +121,7 @@ export default function TrackingPage() {
     { id: 1, label: "ส่งเรื่องแล้ว", icon: FileText },
     { id: 2, label: "กำลังตรวจสอบ", icon: UserCheck },
     { id: 3, label: "รับเคสแล้ว", icon: Handshake },
-    { id: 4, label: "กำลังเดินทาง", icon: Truck },
+    { id: 4, label: "กู้ภัยกำลังเดินทางมาหาคุณ", icon: Truck },
     { id: 5, label: "ปิดเคส", icon: Home },
   ];
 
@@ -119,7 +138,9 @@ export default function TrackingPage() {
 
       await updateDoc(reportRef, {
         description: newDescription,
-        lastUpdated: serverTimestamp()
+        lastUpdated: serverTimestamp(),
+        // ✅ LOGIC ใหม่: เมื่อเราส่งข้อความ ให้เพิ่มเลขแจ้งเตือนฝั่งกู้ภัยทีละ 1
+        unreadForRescuer: increment(1)
       });
       setChatMessage('');
     } catch (error) {
@@ -143,10 +164,9 @@ export default function TrackingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans flex flex-col">
-      {/* 1. Navbar (Landing Page Style) */}
+      {/* Navbar */}
       <nav className="bg-[#1E3A8A] text-white w-full shadow-md sticky top-0 z-50">
         <div className="w-full px-6 py-4 flex justify-between items-center">
-          {/* Brand */}
           <div className="flex flex-col">
             <Link href="/" className="text-2xl font-bold tracking-tight hover:opacity-90 transition">
               ThaiSave(ไทยเซฟ)
@@ -155,10 +175,7 @@ export default function TrackingPage() {
               ระบบกลางจัดการภัยพิบัติแห่งชาติ
             </span>
           </div>
-
-          {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-8 text-sm font-medium">
-
             <Link href="/center" className="hover:text-yellow-400 transition">แดชบอร์ด</Link>
             <Link href="/rescue" className="hover:text-yellow-400 transition">ช่วยเหลือ/กู้ภัย</Link>
             <div className="flex bg-white rounded-lg shadow-sm border border-transparent hover:border-gray-300 transition overflow-hidden">
@@ -174,8 +191,6 @@ export default function TrackingPage() {
               </Link>
             </div>
           </div>
-
-          {/* Mobile Menu Icon */}
           <button className="md:hidden text-white">
             <Menu size={28} />
           </button>
@@ -183,7 +198,7 @@ export default function TrackingPage() {
       </nav>
 
       <main className="flex-grow container mx-auto px-4 py-8 max-w-4xl">
-        {/* Header */}
+        {/* Header*/}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4 text-gray-800">
             <Link href="/" className="hover:bg-gray-200 p-2 rounded-full transition">
@@ -215,10 +230,9 @@ export default function TrackingPage() {
           <>
             {/* Main Status Card */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6 relative transition-all">
-              {/* Strip */}
               <div className="absolute left-0 top-0 bottom-0 w-2 bg-green-500 z-10"></div>
               <div className="p-6">
-                {/* Header Info */}
+                {/* Header Info (เหมือนเดิม) */}
                 <div className="flex flex-wrap justify-between items-start gap-4 mb-8">
                   <div>
                     <p className="text-sm text-gray-500 font-semibold mb-1">Ticket ID: #{myReport.id.slice(0, 6)}</p>
@@ -238,7 +252,7 @@ export default function TrackingPage() {
                   </div>
                 </div>
 
-                {/* Timeline */}
+                {/* Timeline (เหมือนเดิม) */}
                 <div className="relative mb-8 px-4">
                   <div className="absolute top-[18px] left-0 right-0 h-2 bg-gray-100 rounded-full -z-0 mx-10"></div>
                   <div
@@ -271,11 +285,35 @@ export default function TrackingPage() {
                   </div>
                 </div>
 
+                {/* Live Tracking Map */}
+                {(myReport.status === 'traveling' || myReport.status === 'accepted') && (
+                    <div className="px-6 pb-6">
+                        <div className="mb-2 flex justify-between items-center">
+                            <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                                {myReport.status === 'traveling' ? '🚑 เจ้าหน้าที่กำลังเดินทางมาหาคุณ' : '📍 พิกัดจุดเกิดเหตุ'}
+                            </h3>
+                            {myReport.status === 'traveling' && (
+                                <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full animate-pulse">
+                                    LIVE TRACKING
+                                </span>
+                            )}
+                        </div>
+                        
+                        {/* เรียกใช้ Component แผนที่ */}
+                        <LiveTrackingMap 
+                            victimLat={myReport.latitude} 
+                            victimLng={myReport.longitude}
+                            rescuerLat={myReport.rescuerLat} // รับค่าจากที่กู้ภัยส่งมา
+                            rescuerLng={myReport.rescuerLng}
+                        />
+                    </div>
+                )}
+
                 {/* Info & Actions */}
                 <div className="flex flex-col md:flex-row justify-between items-end gap-4 mt-6 pt-6 border-t border-gray-100">
                   <div>
                     <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                      {myReport.disasterType} <span className="text-sm font-normal text-gray-500">({myReport.location})</span>
+                      {myReport.disasterType} <span className="text-sm font-normal text-gray-500">({myReport.province})</span>
                     </h2>
                     <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">รายละเอียด: {cleanDesc}</p>
                     <p className="text-xs text-gray-400 mt-2">อัปเดตล่าสุด: {myReport.lastUpdated ? myReport.lastUpdated.toDate().toLocaleTimeString('th-TH') : "เมื่อสักครู่"}</p>
@@ -284,26 +322,28 @@ export default function TrackingPage() {
                   {(myReport.status === 'accepted' || myReport.status === 'traveling' || myReport.status === 'completed') && (
                     <button
                       onClick={() => setIsChatOpen(!isChatOpen)}
-                      className={`px-6 py-2.5 rounded-lg font-bold shadow-sm transition-all duration-300 flex items-center gap-2 whitespace-nowrap text-sm
+                      className={`relative px-6 py-2.5 rounded-lg font-bold shadow-sm transition-all duration-300 flex items-center gap-2 whitespace-nowrap text-sm
                                                 ${isChatOpen
                           ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           : 'bg-blue-600 text-white hover:bg-blue-700 animate-pulse-slow'}
                                             `}
                     >
+                      {/* ✅ UI ใหม่: Badge แจ้งเตือนข้อความ */}
+                      {!isChatOpen && myReport.unreadForVictim > 0 && (
+                         <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm animate-bounce">
+                           {myReport.unreadForVictim}
+                         </span>
+                      )}
+
                       {isChatOpen ? (<><X size={18} /> ซ่อนแชท</>) : (<><MessageCircle size={18} /> ติดต่อเจ้าหน้าที่</>)}
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Sliding Chat Area (Inside the same card wrapper) */}
-              <div
-                className={`transition-all duration-500 ease-in-out overflow-hidden bg-gray-50 border-t border-gray-100
-                                ${isChatOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}
-                            `}
-              >
+              {/* Sliding Chat Area (เหมือนเดิม) */}
+              <div className={`transition-all duration-500 ease-in-out overflow-hidden bg-gray-50 border-t border-gray-100 ${isChatOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}>
                 <div className="flex flex-col h-[500px]">
-                  {/* Messages */}
                   <div className="flex-grow p-6 overflow-y-auto space-y-4 bg-gray-50/50">
                     {chatLogs.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-50">
@@ -313,23 +353,15 @@ export default function TrackingPage() {
                     ) : (
                       chatLogs.map((log, index) => (
                         <div key={index} className={`flex flex-col ${log.sender === 'me' ? 'items-end' : 'items-start'}`}>
-                          <div className={`px-5 py-3 rounded-2xl text-sm max-w-[85%] shadow-sm relative
-                                                        ${log.sender === 'me'
-                              ? 'bg-blue-600 text-white rounded-br-none'
-                              : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'}
-                                                    `}>
+                          <div className={`px-5 py-3 rounded-2xl text-sm max-w-[85%] shadow-sm relative ${log.sender === 'me' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'}`}>
                             {log.message}
                           </div>
-                          <span className="text-[10px] text-gray-400 mt-1 mx-2 font-medium">
-                            {log.sender === 'me' ? 'คุณ' : 'จนท.'} • {log.time}
-                          </span>
+                          <span className="text-[10px] text-gray-400 mt-1 mx-2 font-medium">{log.sender === 'me' ? 'คุณ' : 'จนท.'} • {log.time}</span>
                         </div>
                       ))
                     )}
                     <div ref={chatBottomRef}></div>
                   </div>
-
-                  {/* Input */}
                   <div className="p-4 bg-white border-t border-gray-200">
                     <div className="flex gap-2 items-center bg-gray-100 p-2 rounded-xl border border-transparent focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                       <input
@@ -343,9 +375,7 @@ export default function TrackingPage() {
                       <button
                         onClick={handleSendMessage}
                         disabled={isSending || !chatMessage.trim()}
-                        className={`p-2 rounded-lg transition-all transform hover:scale-105 active:scale-95
-                                                    ${chatMessage.trim() ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}
-                                                `}
+                        className={`p-2 rounded-lg transition-all transform hover:scale-105 active:scale-95 ${chatMessage.trim() ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
                       >
                         {isSending ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
                       </button>
@@ -357,7 +387,6 @@ export default function TrackingPage() {
           </>
         )}
       </main>
-
       <Footer />
     </div>
   );
