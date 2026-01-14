@@ -189,6 +189,8 @@ export default function VictimReportPage() {
     }
   };
 
+  const [errors, setErrors] = useState({});
+
   // 2. Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -196,15 +198,21 @@ export default function VictimReportPage() {
       alert("⚠️ กำลังเชื่อมต่อระบบ... กรุณารอสักครู่");
       return;
     }
-    if (!description) {
-      alert("⚠️ กรุณากรอกรายละเอียด");
-      return;
-    }
-    if (!locationString) {
-      alert("⚠️ กรุณาระบุพิกัด (กดปุ่มดึงพิกัด หรือจิ้มบนแผนที่)");
+
+    // Validation
+    const newErrors = {};
+    if (!description.trim()) newErrors.description = true;
+    if (!contactName.trim()) newErrors.contactName = true;
+    if (!contactPhone.trim()) newErrors.contactPhone = true;
+    if (!locationString.trim()) newErrors.locationString = true;
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      alert("⚠️ กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน (ช่องที่มี * สีแดง)");
       return;
     }
 
+    setErrors({}); // Clear errors if valid
     setIsSubmitting(true);
 
     try {
@@ -256,6 +264,7 @@ export default function VictimReportPage() {
       setLat(null);
       setLng(null);
       setContactName('');
+      setContactPhone(''); // Clear phone as well
       setDisasterType('น้ำท่วม (Flood)');
 
     } catch (error) {
@@ -330,6 +339,7 @@ export default function VictimReportPage() {
               {/* Row 1: ประเภทภัยพิบัติ */}
               <div>
                 <label className="block text-gray-700 font-bold mb-2">
+                  <span className="text-red-500 mr-1">*</span>
                   ประเภทภัยพิบัติ
                 </label>
                 <select
@@ -347,6 +357,7 @@ export default function VictimReportPage() {
               {/* Row 2: รายละเอียด */}
               <div>
                 <label className="block text-gray-700 font-bold mb-2">
+                  <span className="text-red-500 mr-1">*</span>
                   รายละเอียดสถานการณ์ (ระบุเด็ก/คนชรา/ผู้ป่วย)
                 </label>
                 <textarea
@@ -354,7 +365,7 @@ export default function VictimReportPage() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="เช่น น้ำท่วมถึงชั้น 2, มีผู้ป่วยติดเตียง 1 คน, เด็ก 2 คน, อาหารหมดแล้ว"
-                  className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+                  className={`w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 ${errors.description ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                   required
                 />
               </div>
@@ -362,6 +373,7 @@ export default function VictimReportPage() {
               {/* Row 2.5: ชื่อผู้ติดต่อ */}
               <div>
                 <label className="block text-gray-700 font-bold mb-2">
+                  <span className="text-red-500 mr-1">*</span>
                   ชื่อผู้แจ้ง
                 </label>
                 <input
@@ -369,7 +381,7 @@ export default function VictimReportPage() {
                   value={contactName}
                   onChange={(e) => setContactName(e.target.value)}
                   placeholder="ระบุชื่อของคุณ"
-                  className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+                  className={`w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 ${errors.contactName ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                   required
                 />
               </div>
@@ -377,14 +389,15 @@ export default function VictimReportPage() {
               {/* Row 3: เบอร์ติดต่อ */}
               <div>
                 <label className="block text-gray-700 font-bold mb-2">
-                  เบอร์ติดต่อ (จำเป็น)
+                  <span className="text-red-500 mr-1">*</span>
+                  เบอร์ติดต่อ
                 </label>
                 <input
                   type="tel"
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
                   placeholder="08x-xxx-xxxx"
-                  className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+                  className={`w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 ${errors.contactPhone ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                   required
                 />
               </div>
@@ -392,6 +405,7 @@ export default function VictimReportPage() {
               {/* Row 3: พิกัด GPS */}
               <div>
                 <label className="block text-gray-700 font-bold mb-2">
+                  <span className="text-red-500 mr-1">*</span>
                   พิกัดสถานที่ (GPS)
                 </label>
 
@@ -413,7 +427,7 @@ export default function VictimReportPage() {
                       value={locationString}
                       onChange={(e) => setLocationString(e.target.value)}
                       placeholder="พิกัดจะขึ้นอัตโนมัติเมื่อกดปุ่ม GPS หรือจิ้มแผนที่"
-                      className="w-full pl-10 p-3 border border-gray-300 rounded-t sm:rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 bg-gray-50"
+                      className={`w-full pl-10 p-3 border rounded-t sm:rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 bg-gray-50 ${errors.locationString ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                       required
                       readOnly // แนะนำให้ readOnly เพื่อบังคับใช้ Map/GPS
                     />
@@ -432,7 +446,7 @@ export default function VictimReportPage() {
               {/* Row 4: แนบหลักฐาน (Visual Placeholder) */}
               {/* Row 4: แนบหลักฐาน (รูปภาพ) */}
               <div>
-                <label className="block text-gray-700 font-bold mb-2">แนบหลักฐาน (รูปภาพ)</label>
+                <label className="block text-gray-700 font-bold mb-2">แนบหลักฐานรูปภาพ(ถ้ามี)</label>
 
                 {!selectedFile ? (
                   <label className="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center bg-gray-50 hover:bg-blue-50 transition cursor-pointer flex flex-col items-center justify-center gap-2">

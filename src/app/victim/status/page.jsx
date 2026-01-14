@@ -253,31 +253,36 @@ export default function TrackingPage() {
                 </div>
 
                 {/* Timeline (เหมือนเดิม) */}
-                <div className="relative mb-8 px-4">
-                  <div className="absolute top-[18px] left-0 right-0 h-2 bg-gray-100 rounded-full -z-0 mx-10"></div>
-                  <div
-                    className="absolute top-[18px] left-0 h-2 bg-green-500 rounded-full -z-0 mx-10 transition-all duration-700 ease-out"
-                    style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}
-                  ></div>
-
-                  <div className="flex justify-between items-start relative z-10">
-                    {steps.map((step) => {
+                <div className="relative mb-24 px-2 md:px-4">
+                  <div className="flex items-start w-full">
+                    {steps.map((step, index) => {
                       const isActive = step.id <= currentStep;
                       const Icon = step.icon;
+                      const isLast = index === steps.length - 1;
+
                       return (
-                        <div key={step.id} className="flex flex-col items-center gap-2 w-24">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border-4
-                                                        ${isActive ? 'bg-white border-green-500 text-green-600 shadow-md scale-110' : 'bg-white border-gray-200 text-gray-300'}
-                                                    `}>
-                            {isActive ? <span className="text-sm font-bold">{step.id}</span> : <span className="text-sm font-bold text-gray-300">{step.id}</span>}
-                          </div>
-                          <div className="flex flex-col items-center gap-1">
-                            <Icon size={16} className={isActive ? 'text-green-600' : 'text-gray-300'} />
-                            <span className={`text-[10px] md:text-xs text-center font-bold px-2 py-0.5 rounded
-                                                            ${isActive ? 'text-green-700' : 'text-gray-400'}
-                                                        `}>
-                              {step.label}
-                            </span>
+                        <div key={step.id} className={`flex-1 flex items-center ${isLast ? 'flex-grow-0' : ''}`}>
+                          <div className="flex items-center w-full">
+                            {/* Step Node (Circle + Absolute Label) */}
+                            <div className="relative z-10 flex flex-col items-center">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border-4 
+                                     ${isActive ? 'bg-white border-green-500 text-green-600 shadow-md scale-110' : 'bg-white border-gray-200 text-gray-300'}`}>
+                                {isActive ? <span className="text-sm font-bold">{step.id}</span> : <span className="text-sm font-bold text-gray-300">{step.id}</span>}
+                              </div>
+                              <div className="absolute top-12 left-1/2 -translate-x-1/2 w-24 flex flex-col items-center gap-1">
+                                <Icon size={16} className={isActive ? 'text-green-600' : 'text-gray-300'} />
+                                <span className={`text-[10px] md:text-xs text-center font-bold px-1 rounded whitespace-normal
+                                            ${isActive ? 'text-green-700' : 'text-gray-400'}
+                                        `}>
+                                  {step.label}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Connector Line */}
+                            {!isLast && (
+                              <div className={`flex-1 h-2 -ml-1 -mr-1 relative z-0 ${currentStep > step.id ? 'bg-green-500' : 'bg-gray-100'} transition-colors duration-500`}></div>
+                            )}
                           </div>
                         </div>
                       );

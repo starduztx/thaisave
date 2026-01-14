@@ -110,8 +110,8 @@ export default function PolicyReport({ reports }) {
         const x = cx + radius * Math.cos(-midAngle * RADIAN);
         const y = cy + radius * Math.sin(-midAngle * RADIAN);
         return (
-            <text x={x} y={y} fill="black" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs font-bold">
-                {value}
+            <text x={x} y={y} fill="black" textAnchor="middle" dominantBaseline="central" className="text-xs font-bold">
+                {`${(percent * 100).toFixed(0)}%`}
             </text>
         );
     };
@@ -123,14 +123,14 @@ export default function PolicyReport({ reports }) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
                 {/* CARD 1: อัตราความสำเร็จ */}
-                <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col items-center justify-center border-b-4 border-green-500 min-h-[300px]">
-                    <h3 className="text-gray-600 mb-8 font-medium">อัตราการรับช่วยเหลือสำเร็จ</h3>
-                    <div className="text-center">
-                        <span className="text-6xl font-bold text-green-500">{successRate}%</span>
-                        <p className="text-gray-500 mt-4 text-sm">
+                <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col items-center border-b-4 border-green-500 min-h-[300px]">
+                    <h3 className="text-gray-600 mb-4 font-medium">อัตราการรับช่วยเหลือสำเร็จ</h3>
+                    <div className="text-center mt-6">
+                        <span className="text-7xl font-bold text-green-500 tracking-tight">{successRate}%</span>
+                        <p className="text-gray-500 mt-6 text-sm">
                             จากเคสทั้งหมด {totalCases} เคส
                         </p>
-                        <p className="text-gray-600 font-bold text-lg">
+                        <p className="text-gray-600 font-bold text-lg mt-4">
                             ช่วยเหลือสำเร็จ {successCases} เคส
                         </p>
                     </div>
@@ -153,12 +153,20 @@ export default function PolicyReport({ reports }) {
                                     labelLine={false}
                                     label={renderCustomizedLabel}
                                 >
-                                    {pieData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
+                                    {pieData.map((entry, index) => {
+                                        // ✅ แก้ไข: กำหนดสีตามประเภทภัยพิบัติให้ถูกต้อง
+                                        let fillColor = '#CBD5E1'; // Default Gray
+                                        const name = entry.name.toLowerCase();
+
+                                        if (name.includes('น้ำท่วม') || name.includes('flood')) fillColor = '#60A5FA'; // สีฟ้า
+                                        else if (name.includes('ไฟไหม้') || name.includes('fire')) fillColor = '#F87171'; // สีแดง
+                                        else if (name.includes('ดินถล่ม') || name.includes('landslide')) fillColor = '#FCD34D'; // สีเหลือง
+
+                                        return <Cell key={`cell-${index}`} fill={fillColor} />;
+                                    })}
                                 </Pie>
                                 <Tooltip />
-                                <Legend verticalAlign="bottom" height={36} />
+                                <Legend layout="vertical" verticalAlign="middle" align="left" />
                             </PieChart>
                         </ResponsiveContainer>
                     </div>
@@ -175,7 +183,7 @@ export default function PolicyReport({ reports }) {
                                 <BarChart
                                     layout="vertical"
                                     data={barData}
-                                    margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                                    margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
                                 >
                                     {/* ✅ 1. เพิ่ม Grid แนวตั้ง (เส้นจางๆ) */}
                                     <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.5} />
@@ -191,7 +199,7 @@ export default function PolicyReport({ reports }) {
                                     <YAxis
                                         dataKey="name"
                                         type="category"
-                                        width={90}
+                                        width={70}
                                         tick={{ fontSize: 12 }}
                                         interval={0}
                                     />
