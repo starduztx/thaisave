@@ -3,25 +3,36 @@
 import { useState, useEffect } from "react";
 import { db } from "@/lib/db";
 import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, deleteDoc } from "firebase/firestore";
-import { Check, X, Shield, User, Trash2 } from "lucide-react";
+import { Check, X, Shield, User, Trash2 ,BarChart2} from "lucide-react";
+import RescueTeamTable from "@/components/dashboard/RescueTeamTable";
 
 export default function AdminPage() {
     const [pendingUsers, setPendingUsers] = useState([]);
     const [activeUsers, setActiveUsers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [reports, setReports] = useState([]);
 
     useEffect(() => {
-        // Fetch users
-        const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        // --- ส่วนที่ A: ดึงข้อมูล Users (ของเดิม) ---
+        const qUsers = query(collection(db, "users"), orderBy("createdAt", "desc"));
+        const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
             const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
             setPendingUsers(allUsers.filter(u => u.role === 'pending'));
             setActiveUsers(allUsers.filter(u => u.role !== 'pending'));
+        });
+
+        // --- ส่วนที่ B: ดึงข้อมูล Reports
+        const qReports = query(collection(db, "reports"));
+        const unsubscribeReports = onSnapshot(qReports, (snapshot) => {
+            const allReports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setReports(allReports); // เก็บลง State
             setLoading(false);
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribeUsers();
+            unsubscribeReports();
+        };
     }, []);
 
     const handleApprove = async (userId, userName) => {
@@ -66,9 +77,14 @@ export default function AdminPage() {
         <main className="container mx-auto px-4 py-8 max-w-5xl">
             {/* Header */}
             <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">จัดการสิทธิ์การเข้าใช้งาน</h1>
-                <p className="text-gray-500 text-sm">อนุมัติผู้ขอใช้งานใหม่เพื่อเข้าสู่ระบบกู้ภัย</p>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">แผงควบคุมผู้ดูแลระบบ</h1>
+                <p className="text-gray-500 text-sm">จัดการสิทธิ์ผู้ใช้งานและติดตามประสิทธิภาพทีมกู้ภัย</p>
             </div>
+
+            <section className="mb-10">
+                {/* ส่งข้อมูล reports ไปให้ตารางคำนวณเอง */}
+                <RescueTeamTable reports={reports} />
+            </section>
 
             {/* Pending Section */}
             <div className="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden mb-8">
