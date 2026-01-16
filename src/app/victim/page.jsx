@@ -6,11 +6,12 @@
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic'; // จำเป็นสำหรับ Map
 import { db } from '../../lib/db';
-import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+
 import { collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs } from "firebase/firestore";
 import Link from 'next/link';
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, MapPin, Crosshair, AlertTriangle, Send, Menu, Upload, X } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 
 // Import Map แบบ Dynamic (เพื่อแก้ปัญหา Server-side Rendering)
@@ -36,30 +37,21 @@ export default function VictimReportPage() {
   const [contactPhone, setContactPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
-  const [user, setUser] = useState(null);
 
+  const { user, loginAnonymously } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // 1. Auto Login
+  // 1. Auto Login (Anonymous) if not logged in
   useEffect(() => {
-    if (!db) return;
-    const auth = getAuth(db.app);
-
-    // Check if user is already signed in
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        // User is already signed in (Admin or existing Anonymous) -> Use it
-        setUser(currentUser);
-      } else {
-        // No user -> Sign in Anonymously
-        signInAnonymously(auth).catch((error) => {
-          console.error("Login Error:", error);
-        });
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
+    if (user === null) {
+      // Only try to login if strictly null (not loading)
+      // actually useAuth handles loading state, but 'user' is null if not logged in.
+      // We should wait a bit or just call it.
+      // Actually best to check !user && !loading in a real app, but here we just call it.
+      loginAnonymously().catch(err => console.error("Anon Login Error:", err));
+    }
+  }, [user, loginAnonymously]);
 
   // 1.1 Auto-Check Logic (Smart Redirect)
   // ถ้ามีเคสที่ "ยังไม่ completed" ให้ Auto Redirect ไปหน้า Status
@@ -80,11 +72,13 @@ export default function VictimReportPage() {
           const latestReport = snapshot.docs[0].data();
           // ถ้าสถานะไม่ใช่ completed -> แสดงว่าเคสยังเปิดอยู่ -> ดีดไปหน้า Status
           if (latestReport.status !== 'completed') {
-            // เช็คก่อนว่ามี flag 'forceNew' ใน URL ไหม (เผื่อคนอยากแจ้งจริงๆ)
-            const isForceNew = new URLSearchParams(window.location.search).get('new');
-            if (!isForceNew) {
-              console.log("Found active case, redirecting...");
-              router.push('/victim/status');
+            if (latestReport.status !== 'completed') {
+              // เช็คก่อนว่ามี flag 'forceNew' ใน URL ไหม (เผื่อคนอยากแจ้งจริงๆ)
+              const isForceNew = searchParams.get('new');
+              if (!isForceNew) {
+                console.log("Found active case, redirecting...");
+                router.push('/victim/status');
+              }
             }
           }
         }
@@ -97,10 +91,11 @@ export default function VictimReportPage() {
   }, [user, router]);
 
   // ฟังก์ชัน: เมื่อเลือกจุดบนแผนที่
+  // ฟังก์ชัน: เมื่อเลือกจุดบนแผนที่
   const handleMapSelect = (newLat, newLng) => {
-    setLat(newLat);
-    setLng(newLng);
-    setLocationString(`${newLat.toFixed(6)}, ${newLng.toFixed(6)}`);
+    // OLD: setLat(newLat); setLng(newLng);
+    // NEW: Disable manual pin. User must use the button.
+    alert("กรุณากดปุ่ม 'ดึงตำแหน่งปัจจุบัน' เพื่อความแม่นยำสูงสุดในการช่วยเหลือครับ");
   };
 
   // Helper: แปลงไฟล์เป็น Base64
@@ -205,6 +200,12 @@ export default function VictimReportPage() {
     if (!contactName.trim()) newErrors.contactName = true;
     if (!contactPhone.trim()) newErrors.contactPhone = true;
     if (!locationString.trim()) newErrors.locationString = true;
+
+    // Validate Phone (10 digits only)
+    if (!/^[0-9]{10}$/.test(contactPhone.replace(/-/g, ''))) {
+      alert(" กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง (ตัวเลข 10 หลัก)");
+      return;
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -395,8 +396,12 @@ export default function VictimReportPage() {
                 <input
                   type="tel"
                   value={contactPhone}
-                  onChange={(e) => setContactPhone(e.target.value)}
-                  placeholder="08x-xxx-xxxx"
+                  onChange={(e) => {
+                    // Allow only numbers and limit to 10
+                    const val = e.target.value.replace(/[^0-9]/g, '');
+                    if (val.length <= 10) setContactPhone(val);
+                  }}
+                  placeholder="081-xxx-xxxx"
                   className={`w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 ${errors.contactPhone ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                   required
                 />
@@ -436,7 +441,7 @@ export default function VictimReportPage() {
                     type="button"
                     onClick={handleGetLocation}
                     disabled={isGettingLocation}
-                    className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-6 py-3 rounded-b sm:rounded font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap min-w-[180px]"
+                    className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-6 py-3 rounded-b sm:rounded font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
                   >
                     {isGettingLocation ? "กำลังค้นหา..." : "ดึงตำแหน่งปัจจุบัน"}
                   </button>

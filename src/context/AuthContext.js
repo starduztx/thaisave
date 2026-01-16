@@ -7,7 +7,8 @@ import {
     signOut,
     onAuthStateChanged,
     GoogleAuthProvider,
-    signInWithPopup
+    signInWithPopup,
+    signInAnonymously
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/config";
@@ -85,6 +86,11 @@ export const AuthProvider = ({ children }) => {
 
     const logout = () => {
         return signOut(auth);
+    };
+
+    // Anonymous Login
+    const loginAnonymously = () => {
+        return signInAnonymously(auth);
     };
 
     useEffect(() => {
@@ -182,7 +188,7 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     return (
-        <AuthContext.Provider value={{ user, loading, register, login, loginWithGoogle, logout }}>
+        <AuthContext.Provider value={{ user, loading, register, login, loginWithGoogle, loginAnonymously, logout }}>
             {/* Don't render children until we know the auth state */}
             {!loading && children}
         </AuthContext.Provider>

@@ -13,6 +13,7 @@ export default function Navbar({ activePage }) {
     const handleLogout = async () => {
         try {
             await logout();
+            localStorage.removeItem('rescue_location_enabled');
             window.location.href = '/login';
         } catch (error) {
             console.error("Logout failed", error);

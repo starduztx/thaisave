@@ -12,11 +12,24 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 
 // --- UTILITY: แยกข้อความ Description (เอาไว้โชว์แค่ข้อความหลัก) ---
+// --- UTILITY: แยกข้อความ Description (เอาไว้โชว์แค่ข้อความหลัก) ---
 const parseReportData = (fullDescription) => {
   if (!fullDescription) return { cleanDesc: "" };
   // ตัดส่วนที่เป็น Chat log ออก เพื่อแสดงแค่รายละเอียดตั้งต้น
   const cleanDesc = fullDescription.split('\n\n💬')[0];
   return { cleanDesc };
+};
+
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return (R * c).toFixed(1);
 };
 
 // --- SUB-COMPONENT: ปุ่มจัดการสถานะ (ปรับ Logic ตามโจทย์ + Gatekeeping) ---
@@ -129,8 +142,8 @@ function LocationPermissionModal({ onEnable, onSkip }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-8 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onSkip}>
+      <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-8 flex flex-col items-center text-center animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
         <div className="mb-6">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -163,13 +176,6 @@ function LocationPermissionModal({ onEnable, onSkip }) {
             {loading && <Loader2 className="animate-spin" size={20} />}
             เปิดตำแหน่ง
           </button>
-
-          <button
-            onClick={onSkip}
-            className="w-full bg-white hover:bg-gray-50 text-gray-800 font-medium py-3.5 rounded-full border border-gray-300 transition-colors active:bg-gray-100"
-          >
-            ข้ามขั้นตอนนี้
-          </button>
         </div>
       </div>
     </div>
@@ -193,9 +199,19 @@ export default function RescueDashboard() {
   useEffect(() => {
     if (!user || user.role === 'center') return; // Skip for admins or if no user yet
 
-    // Show modal once data is loaded and we are on the page
+    // Show modal once data is loaded and we are on the page, IF NOT already enabled
     const timer = setTimeout(() => {
-      setShowLocationModal(true);
+      const savedLocationState = localStorage.getItem('rescue_location_enabled');
+      if (savedLocationState === 'true') {
+        setIsLocationEnabled(true);
+        // Fetch location immediately if enabled
+        navigator.geolocation.getCurrentPosition(
+          (position) => setUserLocation(position),
+          (error) => console.error("Auto-location error:", error)
+        );
+      } else {
+        setShowLocationModal(true);
+      }
     }, 1000);
     return () => clearTimeout(timer);
   }, [user]);
@@ -204,6 +220,7 @@ export default function RescueDashboard() {
     setIsLocationEnabled(true);
     setUserLocation(position);
     setShowLocationModal(false);
+    localStorage.setItem('rescue_location_enabled', 'true');
   };
 
   const handleLocationSkip = () => {
@@ -283,7 +300,7 @@ export default function RescueDashboard() {
                     <div className="p-6">
                       {/* HEADER */}
                       <div className="flex justify-between items-start mb-4">
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1">
                           {item.status === 'pending' && <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">วิกฤต/รอการช่วยเหลือ</span>}
                           {item.status === 'investigating' && <span className="bg-yellow-100 text-yellow-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">กำลังตรวจสอบ</span>}
                           {item.status === 'accepted' && <span className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">รับเคสแล้ว</span>}
@@ -291,7 +308,16 @@ export default function RescueDashboard() {
                           {item.status === 'completed' && <span className="bg-green-100 text-green-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">เสร็จสิ้น</span>}
                           <span className="text-gray-500 text-xs">{item.province || item.location || 'ไม่ระบุพิกัด'}</span>
                         </div>
-                        <span className="text-gray-400 text-xs">{timeAgo(item.timestamp)}</span>
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span className="text-gray-400 text-xs">
+                            {timeAgo(item.timestamp)} {item.timestamp && `เวลา ${item.timestamp.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`}
+                          </span>
+                          {isLocationEnabled && userLocation && item.latitude && item.longitude && (item.status === 'pending' || item.status === 'investigating') && (
+                            <span className="text-blue-600 text-xs font-bold">
+                              ห่างจากคุณ {calculateDistance(userLocation.coords.latitude, userLocation.coords.longitude, item.latitude, item.longitude)} กม.
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* BODY */}
