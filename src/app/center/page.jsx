@@ -7,6 +7,18 @@ import { db } from '../../lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, limit } from "firebase/firestore";
+import RescueTeamTable from '@/components/dashboard/RescueTeamTable';
+
+// --- 1. นิยามสถานะทั้งหมดที่มีในระบบ ---
+const STATUS_MAP = {
+  investigating: { label: 'รอตรวจสอบ', color: 'bg-yellow-100 text-yellow-800', border: 'border-yellow-200' },
+  traveling:       { label: 'กำลังช่วยเหลือ', color: 'bg-orange-100 text-orange-800', border: 'border-orange-200' },
+  completed:     { label: 'เสร็จสิ้น', color: 'bg-green-100 text-green-800', border: 'border-green-200' }
+};
+
+// สถานะไหนที่ถือว่า "จบงานแล้ว" (เอาไว้กรองหรือเปลี่ยนสีพื้นหลัง)
+const IS_FINISHED = (status) => ['completed'].includes(status);
+
 
 // Import Map แบบ Dynamic
 const MapContainer = dynamic(() => import('../../components/map/MapContainer'), {
@@ -22,59 +34,48 @@ const LocationDisplay = ({ lat, lng, text }) => {
   const [province, setProvince] = useState(text || 'กำลังระบุพิกัด...');
 
   useEffect(() => {
-    // ถ้ามีคำว่า จ. หรือ จังหวัด อยู่แล้ว ให้ใช้ text เดิมเลย
-    if (text && (text.includes("จ.") || text.includes("จังหวัด"))) {
-      setProvince(text);
-      return;
+    // 1. รับค่าจาก Database (priority หลัก)
+    let displayText = text;
+
+    // 2. ถ้าไม่มี text ให้ลองเช็คว่ามีค่า lat, lng ไหม (เผื่อเคสเก่าๆ ที่ยังไม่มี text)
+    if ((!displayText || displayText === "ไม่ระบุ") && lat && lng) {
+      displayText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`; // แปลงเป็นเลขพิกัดแทน
     }
 
-    // 2. เตรียมพิกัด (รองรับทั้งแยก Field และรวมใน String)
-    let targetLat = lat;
-    let targetLng = lng;
+    // 3. เริ่มเข้าสู่กระบวนการ "จัดสวย" (Formatter)
+    if (displayText && displayText.trim() !== "") {
+      let cleanText = displayText.toString().trim();
 
-    if ((!targetLat || !targetLng) && text && text.includes(',')) {
-      const parts = text.split(',').map(s => parseFloat(s.trim()));
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        targetLat = parts[0];
-        targetLng = parts[1];
+      // --- เช็คเงื่อนไขต่างๆ เพื่อดูว่าจะเติม "จ." ดีไหม ---
+      
+      // A. เช็คว่าเป็นที่อยู่ละเอียด/กทม. หรือไม่ (พวกนี้ไม่ต้องเติม จ.)
+      const isFullAddress = 
+        cleanText.includes("ต.") || cleanText.includes("อ.") || 
+        cleanText.includes("ถ.") || cleanText.includes("ซ.") ||
+        cleanText.includes("หมู่") || cleanText.includes("อาคาร") ||
+        cleanText.includes("กทม") || cleanText.includes("กรุงเทพ");
+
+      // B. เช็คว่าเป็นเลขพิกัดหรือไม่ (ถ้าใช่ ให้ใส่ไอคอนหมุด)
+      // (regex เช็คว่ามีแต่ตัวเลข จุด และลูกน้ำ)
+      const isCoordinate = /^[0-9.,\s-]+$/.test(cleanText);
+
+      // C. เช็คว่ามีคำนำหน้าอยู่แล้วไหม
+      const hasPrefix = cleanText.startsWith("จ.") || cleanText.startsWith("จังหวัด");
+
+      if (isCoordinate) {
+        setProvince(`📍 ${cleanText}`); // เคสเลขพิกัด
+      } else if (isFullAddress || hasPrefix) {
+        setProvince(cleanText); // เคสที่อยู่ครบ หรือมี จ. อยู่แล้ว -> โชว์เลย
+      } else {
+        setProvince(`จ.${cleanText}`); // เคสจังหวัดโดดๆ -> เติม จ. ให้ดูดี
       }
-    }
-
-    // 3. ยิง API ถ้ามีพิกัด
-    if (targetLat && targetLng) {
-      setProvince("กำลังระบุพิกัด...");
-
-      // Primary: BigDataCloud
-      fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${targetLat}&longitude=${targetLng}&localityLanguage=th`)
-        .then(res => {
-          if (!res.ok) throw new Error("BDC Error");
-          return res.json();
-        })
-        .then(data => {
-          if (data.principalSubdivision) {
-            setProvince(data.principalSubdivision.replace("จังหวัด", "จ.").trim());
-          } else {
-            throw new Error("No Province Data");
-          }
-        })
-        .catch(() => {
-          // Fallback: Nominatim (OpenStreetMap)
-          fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetLat}&lon=${targetLng}&zoom=10&accept-language=th`)
-            .then(res => res.json())
-            .then(data => {
-              if (data.address && data.address.province) {
-                setProvince(data.address.province.replace("จังหวัด", "จ.").trim());
-              } else {
-                setProvince(`${targetLat.toFixed(3)}, ${targetLng.toFixed(3)}`);
-              }
-            })
-            .catch(() => setProvince(`${targetLat.toFixed(3)}, ${targetLng.toFixed(3)}`));
-        });
+      
     } else {
-      // 4. ถ้าไม่มีข้อมูลอะไรเลย
-      setProvince(text || "ไม่ระบุพิกัด");
+      // 4. ถ้าไม่มีข้อมูลอะไรเลยจริงๆ
+      setProvince("ไม่ระบุพิกัด");
     }
-  }, [lat, lng, text]);
+
+  }, [lat, lng, text]); // Dependency Array
 
   return <span>{province}</span>;
 };
@@ -105,15 +106,17 @@ export default function CenterDashboardPage() {
   };
 
   const filteredReports = reports.filter((item) => {
+    // กรองประเภทภัย (เหมือนเดิม)
     const typeValue = item.disasterType || '';
     const matchType = filterType === 'all' || typeValue.includes(filterType);
 
+    // ✅ กรองสถานะ: ถ้าเลือก 'all' เอาหมด / ถ้าเลือกเจาะจง ให้เช็คว่าตรงกันไหม
     let matchStatus = true;
-    if (filterStatus === 'pending') {
-      matchStatus = ['pending', 'approved', 'accepted'].includes(item.status);
-    } else if (filterStatus === 'completed') {
-      matchStatus = item.status === 'completed';
+    if (filterStatus !== 'all') {
+      // เทียบ value ใน DB กับ value ที่เราเลือกใน Dropdown
+      matchStatus = item.status === filterStatus; 
     }
+    
     return matchType && matchStatus;
   });
 
@@ -151,6 +154,41 @@ export default function CenterDashboardPage() {
     return 'รอตรวจสอบ';
   };
 
+  
+  const STATUS_MAP = {
+  // 1. สถานะ: รอตรวจสอบ
+  investigating: { 
+    label: 'รอตรวจสอบ', 
+    // สีป้ายและขอบการ์ด
+    badge: 'bg-yellow-100 text-yellow-800', 
+    border: 'border-yellow-200 bg-white',
+    // สีแถบซ้าย (เข้มกว่าป้ายหน่อย)
+    strip: 'bg-yellow-400',
+    // ปุ่มกด: ถ้าอยู่สถานะนี้ ปุ่มจะพาไป -> "traveling"
+    action: { label: 'รับเรื่อง / ออกปฏิบัติการ', next: 'traveling', btnColor: 'bg-blue-600 hover:bg-blue-700 text-white' }
+  },
+
+  // 2. สถานะ: กำลังช่วยเหลือ (Traveling)
+  traveling: { 
+    label: 'กำลังช่วยเหลือ', 
+    badge: 'bg-orange-100 text-orange-800', 
+    border: 'border-orange-200 bg-orange-50/30', // ใส่พื้นหลังจางๆ ให้รู้ว่ากำลังทำงาน
+    strip: 'bg-orange-500',
+    // ปุ่มกด: ถ้าอยู่สถานะนี้ ปุ่มจะพาไป -> "completed"
+    action: { label: 'ปิดงาน / เสร็จสิ้น', next: 'completed', btnColor: 'bg-green-600 hover:bg-green-700 text-white' }
+  },
+
+  // 3. สถานะ: เสร็จสิ้น
+  completed: { 
+    label: 'เสร็จสิ้น', 
+    badge: 'bg-green-100 text-green-800', 
+    border: 'border-green-200 bg-green-50/30',
+    strip: 'bg-green-500',
+    // ปุ่มกด: จบงานแล้ว ไม่มีปุ่ม หรือเป็นปุ่ม Disabled
+    action: { label: 'เรียบร้อย', next: null, btnColor: 'bg-gray-100 text-gray-400 cursor-default' }
+  }
+};
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-10">
       <Navbar activePage="center" />
@@ -186,11 +224,17 @@ export default function CenterDashboardPage() {
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
-                  className="appearance-none bg-white border border-gray-300 rounded px-4 py-2 pr-8 text-sm focus:outline-none focus:border-blue-500 w-40"
+                  className="appearance-none bg-white border border-gray-300 rounded px-4 py-2 pr-8 text-sm focus:outline-none focus:border-blue-500 w-48"
                 >
                   <option value="all">สถานะทั้งหมด</option>
-                  <option value="pending">รอตรวจสอบ</option>
-                  <option value="completed">เสร็จสิ้น</option>
+                  
+                  {/* ✅ วนลูปสร้างตัวเลือกจาก STATUS_MAP (เพิ่มลดง่ายในอนาคต) */}
+                  {Object.keys(STATUS_MAP).map((key) => (
+                    <option key={key} value={key}>
+                      {STATUS_MAP[key].label}
+                    </option>
+                  ))}
+                  
                 </select>
                 <ChevronDown className="absolute right-2 top-2.5 text-gray-500 pointer-events-none" size={16} />
               </div>
@@ -216,73 +260,78 @@ export default function CenterDashboardPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="h-[600px] overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
 
-              {filteredReports.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-gray-500">
-                  <p>ไม่พบข้อมูลตามเงื่อนไขที่เลือก</p>
-                </div>
-              ) : (
-                filteredReports.map(item => (
-                  <div key={item.id} className={`p-5 rounded-xl border flex flex-col md:flex-row gap-4 relative overflow-hidden transition-all hover:shadow-md items-start md:items-center ${isGreenStatus(item.status) ? 'border-green-200 bg-green-50/30' : 'border-gray-200 bg-white'
-                    }`}>
-                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isGreenStatus(item.status) ? 'bg-green-500' : 'bg-[#EF4444]'}`}></div>
+              {filteredReports.map(item => {
+                  // ดึงค่าสีตามสถานะ (ถ้าไม่มี ให้ใช้ default เป็น investigating)
+                  const statusConfig = STATUS_MAP[item.status] || STATUS_MAP['investigating'];
 
-                    {/* Left: Info */}
-                    <div className="flex-grow pl-3 flex flex-col justify-center gap-2">
-                      {/* Row 1: Status & Location */}
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md ${isGreenStatus(item.status) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                          {getStatusLabel(item.status)}
-                        </span>
-                        <span className="text-gray-500 text-sm flex items-center gap-1">
-                          <MapPinIcon size={14} />
-                          <LocationDisplay lat={item.latitude} lng={item.longitude} text={item.location} />
-                        </span>
-                      </div>
+                  return (
+                    <div key={item.id} className={`p-5 rounded-xl border flex flex-col md:flex-row gap-4 relative overflow-hidden transition-all hover:shadow-md items-start md:items-center ${statusConfig.border}`}>
+                      
+                      {/* 1. เส้นสีด้านซ้าย (ดึงจาก config.strip) */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${statusConfig.strip}`}></div>
 
-                      {/* Row 2: Title (Bigger) */}
-                      <h4 className="text-lg font-bold text-gray-900 leading-tight">
-                        {item.disasterType}
-                      </h4>
-
-                      {/* Row 3: Contact Info (Split Lines) */}
-                      <div className="flex flex-col gap-1 text-sm text-gray-600 mt-1">
+                      {/* Left: Info */}
+                      <div className="flex-grow pl-3 flex flex-col justify-center gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium min-w-[60px]">ผู้แจ้ง:</span>
-                          <span>{item.contactName || '-'}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium min-w-[60px]">เบอร์โทร:</span>
-                          <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-mono text-xs">
-                            {maskPhone(item.contactPhone)}
+                          
+                          {/* 2. ป้ายสถานะ (ดึงจาก config.color) */}
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md ${statusConfig.color}`}>
+                            {statusConfig.label}
+                          </span>
+
+                          <span className="text-gray-500 text-sm flex items-center gap-1">
+                            <MapPinIcon size={14} />
+                            {/* ตรงนี้ใช้ LocationDisplay หรือ Text ปกติของคุณได้เลย */}
+                            <span>{item.province || "ไม่ระบุ"}</span>
                           </span>
                         </div>
+
+                        <h4 className="text-lg font-bold text-gray-900 leading-tight">
+                          {item.disasterType}
+                        </h4>
+
+                        <div className="flex flex-col gap-1 text-sm text-gray-600 mt-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium min-w-[60px]">ผู้แจ้ง:</span>
+                            <span>{item.contactName || '-'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium min-w-[60px]">เบอร์โทร:</span>
+                            <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-mono text-xs">
+                              {maskPhone(item.contactPhone)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Right: Action Button */}
+                      <div className="flex flex-row md:flex-col justify-between items-center md:items-end w-full md:w-auto gap-3 pl-3 md:pl-0 border-t md:border-t-0 border-gray-100 pt-3 md:pt-0 mt-2 md:mt-0">
+
+                        {/* 3. ปุ่มกด (ดึงสีจาก config.btn) */}
+                        <button
+                          onClick={() => updateStatus(item.id, item.status)}
+                          className={`px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm transition-colors whitespace-nowrap ${statusConfig.btn}`}
+                        >
+                          {/* ข้อความในปุ่ม: ถ้าเสร็จแล้วโชว์ติ๊กถูก ถ้ายังไม่เสร็จให้โชว์ข้อความสถานะ */}
+                          {item.status === 'completed' ? '✓ เสร็จสิ้น' : statusConfig.label}
+                        </button>
+
+                        <span className="text-xs text-gray-400">
+                          {item.timestamp ? new Date(item.timestamp.seconds * 1000).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                        </span>
+                      </div>
+
                     </div>
-
-                    {/* Right: Action Button & Date */}
-                    <div className="flex flex-row md:flex-col justify-between items-center md:items-end w-full md:w-auto gap-3 pl-3 md:pl-0 border-t md:border-t-0 border-gray-100 pt-3 md:pt-0 mt-2 md:mt-0">
-
-                      <button
-                        onClick={() => updateStatus(item.id, item.status)}
-                        className={`px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm transition-colors whitespace-nowrap ${isGreenStatus(item.status) ? 'bg-[#10B981] text-white hover:bg-[#059669]' : 'bg-[#FDE68A] text-[#92400E] hover:bg-yellow-200'}`}
-                      >
-                        {isGreenStatus(item.status) ? '✓ เสร็จสิ้น' : 'รอตรวจสอบ'}
-                      </button>
-
-                      <span className="text-xs text-gray-400">
-                        {item.timestamp ? new Date(item.timestamp.seconds * 1000).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
-                      </span>
-                    </div>
-
-                  </div>
-                ))
-              )}
+                  );
+                })}
             </div>
           </div>
         )}
 
         {/* Policy Report Section */}
         <div className="mt-12 border-t pt-8">
+          <RescueTeamTable reports={reports} />
+
           <PolicyReport reports={reports} />
         </div>
       </main>

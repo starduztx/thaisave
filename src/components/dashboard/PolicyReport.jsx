@@ -1,13 +1,10 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 
 const COLORS = ['#93C5FD', '#FCA5A5', '#FCD34D', '#86EFAC', '#C4B5FD'];
 
 export default function PolicyReport({ reports }) {
-    const [barData, setBarData] = useState([]);
-    const [loading, setLoading] = useState(true);
-
     // 1. คำนวณอัตราความสำเร็จ
     const totalCases = reports.length;
     const successCases = reports.filter(r => r.status === 'completed').length;
@@ -25,83 +22,50 @@ export default function PolicyReport({ reports }) {
         value: disasterStats[key]
     }));
 
-    // 3. ระบบแปลงพิกัดเป็นชื่อจังหวัด (ทำงานอัตโนมัติ)
-    useEffect(() => {
-        const processLocations = async () => {
-            setLoading(true);
-            const provinceCount = {};
+    // 3. ข้อมูลกราฟแท่ง (Bar Chart)
+    const provinceStats = reports.reduce((acc, curr) => {
+        let provinceName = curr.province || "ไม่ระบุ";
 
-            // วนลูปเช็คทุกเคส
-            const promises = reports.map(async (report) => {
-                let provinceName = "ไม่ระบุ";
+        // ล้างคำนำหน้าทั่วไป
+        provinceName = provinceName.replace("จังหวัด", "").replace("จ.", "").trim();
 
-                // กรณี A: มีชื่อจังหวัดใน field location อยู่แล้ว (เช่น "จ.สงขลา")
-                if (report.location && (report.location.includes("จ.") || report.location.includes("จังหวัด"))) {
-                    const match = report.location.match(/(?:จ\.|จังหวัด)\s*([^\s]+)/);
-                    if (match) provinceName = match[1];
-                }
-                // กรณี B: ยิง API (ถ้ามีพิกัด หรือถ้าใน location เป็นพิกัด)
-                else {
-                    let lat = report.latitude;
-                    let lng = report.longitude;
-
-                    // พยายามแกะพิกัดจาก string "19.xxx, 100.xxx" (เผื่อข้อมูลเก่าไม่มี field lat/lng)
-                    if ((!lat || !lng) && report.location && report.location.includes(',')) {
-                        const parts = report.location.split(',').map(s => parseFloat(s.trim()));
-                        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                            lat = parts[0];
-                            lng = parts[1];
-                        }
-                    }
-
-                    if (lat && lng) {
-                        try {
-                            // Primary: BigDataCloud
-                            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=th`);
-                            if (!res.ok) throw new Error("BDC Failed");
-
-                            const data = await res.json();
-                            if (data.principalSubdivision) {
-                                provinceName = data.principalSubdivision.replace("จังหวัด", "").trim();
-                            } else {
-                                throw new Error("No Data");
-                            }
-                        } catch (error) {
-                            // Fallback: Nominatim
-                            try {
-                                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&accept-language=th`);
-                                const data = await res.json();
-                                if (data.address && data.address.province) {
-                                    provinceName = data.address.province.replace("จังหวัด", "").trim();
-                                }
-                            } catch (err2) {
-                                console.error("Geocoding completely failed", err2);
-                            }
-                        }
-                    }
-                }
-
-                // นับจำนวน
-                provinceCount[provinceName] = (provinceCount[provinceName] || 0) + 1;
-            });
-
-            // รอให้แปลงทุกเคสเสร็จ
-            await Promise.all(promises);
-
-            // จัดรูปแบบข้อมูลลงกราฟ
-            const formattedData = Object.keys(provinceCount)
-                .map(key => ({ name: key, count: provinceCount[key] }))
-                .sort((a, b) => b.count - a.count) // เรียงมากไปน้อย
-                .slice(0, 5); // เอาท็อป 5
-
-            setBarData(formattedData);
-            setLoading(false);
-        };
-
-        if (reports.length > 0) {
-            processLocations();
+        // ✅ เพิ่มตรงนี้: ดักจับ "กรุงเทพ" ให้เป็นชื่อสั้นๆ
+        if (provinceName.includes("กรุงเทพ") || provinceName.includes("กทม")) {
+            provinceName = "กรุงเทพฯ";
         }
-    }, [reports]);
+
+        // เช็คอีกทีเผื่อค่าว่าง
+        if (!provinceName) provinceName = "ไม่ระบุ";
+
+        acc[provinceName] = (acc[provinceName] || 0) + 1;
+        return acc;
+    }, {});
+
+    // 1. แปลงข้อมูล + กรอง "ไม่ระบุ" ทิ้งก่อนเลย (จะได้ไม่มาแย่งที่)
+    let processedData = Object.keys(provinceStats)
+        .map(key => ({ name: key, count: provinceStats[key] }))
+        .filter(item => item.name !== "ไม่ระบุ") 
+        .sort((a, b) => b.count - a.count); // เรียงมาก -> น้อย
+
+    // 2. กำหนดว่าจะโชว์กี่อันดับ (ตามโค้ดคุณคือ 7)
+    const TOP_LIMIT = 7; 
+
+    // 3. ตัดเอาพวกตัวท็อปมา
+    const topList = processedData.slice(0, TOP_LIMIT);
+    
+    // 4. เอาพวกที่เหลือ (ลำดับที่ 8 เป็นต้นไป) มารวมพลังกัน
+    const othersList = processedData.slice(TOP_LIMIT);
+    
+    if (othersList.length > 0) {
+        // บวกเลขจำนวนของพวกที่เหลือทั้งหมด
+        const othersCount = othersList.reduce((sum, item) => sum + item.count, 0);
+        
+        // สร้างแท่งใหม่ชื่อ "อื่นๆ" ต่อท้าย
+        topList.push({ name: "อื่นๆ", count: othersCount });
+    }
+
+    // ส่งค่าไปใช้ในกราฟ
+    const barData = topList; 
 
     // Label ตัวเลขใน Donut Chart
     const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, value }) => {
@@ -154,13 +118,12 @@ export default function PolicyReport({ reports }) {
                                     label={renderCustomizedLabel}
                                 >
                                     {pieData.map((entry, index) => {
-                                        // ✅ แก้ไข: กำหนดสีตามประเภทภัยพิบัติให้ถูกต้อง
                                         let fillColor = '#CBD5E1'; // Default Gray
                                         const name = entry.name.toLowerCase();
 
-                                        if (name.includes('น้ำท่วม') || name.includes('flood')) fillColor = '#60A5FA'; // สีฟ้า
-                                        else if (name.includes('ไฟไหม้') || name.includes('fire')) fillColor = '#F87171'; // สีแดง
-                                        else if (name.includes('ดินถล่ม') || name.includes('landslide')) fillColor = '#FCD34D'; // สีเหลือง
+                                        if (name.includes('น้ำท่วม') || name.includes('flood')) fillColor = '#60A5FA';
+                                        else if (name.includes('ไฟไหม้') || name.includes('fire')) fillColor = '#F87171';
+                                        else if (name.includes('ดินถล่ม') || name.includes('landslide')) fillColor = '#FCD34D';
 
                                         return <Cell key={`cell-${index}`} fill={fillColor} />;
                                     })}
@@ -172,42 +135,37 @@ export default function PolicyReport({ reports }) {
                     </div>
                 </div>
 
-                {/* CARD 3: พื้นที่เสี่ยง (แก้ไขส่วนนี้) */}
+                {/* CARD 3: พื้นที่เสี่ยง (แก้ไขแล้ว: ดึงจาก province) */}
                 <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col items-center border-b-4 border-yellow-400 min-h-[300px]">
                     <h3 className="text-gray-600 mb-4 font-medium">พื้นที่เกิดภัยพิบัติสูงสุด</h3>
                     <div className="w-full h-[200px] pl-2 flex items-center justify-center">
-                        {loading ? (
-                            <div className="text-gray-400 text-sm animate-pulse">กำลังวิเคราะห์ข้อมูลพิกัด...</div>
-                        ) : (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                    layout="vertical"
-                                    data={barData}
-                                    margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
-                                >
-                                    {/* ✅ 1. เพิ่ม Grid แนวตั้ง (เส้นจางๆ) */}
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.5} />
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                                layout="vertical"
+                                data={barData}
+                                margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
+                            >
+                                {/* Grid แนวตั้ง */}
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.5} />
 
-                                    {/* ✅ 2. เอา hide ออก และปรับแต่งตัวเลขแกน X */}
-                                    <XAxis
-                                        type="number"
-                                        tick={{ fontSize: 10 }} // ปรับขนาดตัวเลข
-                                        axisLine={false}      // ซ่อนเส้นแกนทึบๆ
-                                        tickLine={false}      // ซ่อนขีดเล็กๆ
-                                    />
+                                <XAxis
+                                    type="number"
+                                    tick={{ fontSize: 10 }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                />
 
-                                    <YAxis
-                                        dataKey="name"
-                                        type="category"
-                                        width={70}
-                                        tick={{ fontSize: 12 }}
-                                        interval={0}
-                                    />
-                                    <Tooltip cursor={{ fill: 'transparent' }} />
-                                    <Bar dataKey="count" fill="#FCA5A5" radius={[0, 4, 4, 0]} barSize={20} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        )}
+                                <YAxis
+                                    dataKey="name"
+                                    type="category"
+                                    width={70}
+                                    tick={{ fontSize: 12 }}
+                                    interval={0}
+                                />
+                                <Tooltip cursor={{ fill: 'transparent' }} />
+                                <Bar dataKey="count" fill="#FCA5A5" radius={[0, 4, 4, 0]} barSize={20} />
+                            </BarChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
 
