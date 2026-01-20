@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from 'next/link';
 import { db } from "@/lib/db";
-import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, deleteDoc } from "firebase/firestore";
-import { Check, X, Shield, User, Trash2 ,BarChart2} from "lucide-react";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { Check, X, Shield, User, Trash2, Users } from "lucide-react";
 import RescueTeamTable from "@/components/dashboard/RescueTeamTable";
 
 export default function AdminPage() {
     const [pendingUsers, setPendingUsers] = useState([]);
     const [activeUsers, setActiveUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [reports, setReports] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         // --- ส่วนที่ A: ดึงข้อมูล Users (ของเดิม) ---
@@ -76,9 +77,19 @@ export default function AdminPage() {
     return (
         <main className="container mx-auto px-4 py-8 max-w-5xl">
             {/* Header */}
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">แผงควบคุมผู้ดูแลระบบ</h1>
-                <p className="text-gray-500 text-sm">จัดการสิทธิ์ผู้ใช้งานและติดตามประสิทธิภาพทีมกู้ภัย</p>
+            <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900 mb-2">แผงควบคุมผู้ดูแลระบบ</h1>
+                    <p className="text-gray-500 text-sm">จัดการสิทธิ์ผู้ใช้งานและติดตามประสิทธิภาพทีมกู้ภัย</p>
+                </div>
+
+                <Link
+                    href="/admin/teams"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-sm flex items-center gap-2 transition"
+                >
+                    <Users size={20} />
+                    จัดการทีมกู้ภัย
+                </Link>
             </div>
 
             <section className="mb-10">

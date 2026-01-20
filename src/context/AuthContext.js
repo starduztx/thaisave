@@ -60,6 +60,7 @@ export const AuthProvider = ({ children }) => {
                     "kittithatchaichana@gmail.com",
                     "thanachai.bo2546@gmail.com",
                     "starnng@gmail.com",
+                    "yuiiop299@gmail.com"
                 ];
                 const role = adminEmails.includes(user.email) ? "center" : "pending";
 
@@ -100,7 +101,8 @@ export const AuthProvider = ({ children }) => {
                     const adminEmails = [
                         "kittithatchaichana@gmail.com",
                         "thanachai.bo2546@gmail.com",
-                        "starnng@gmail.com"
+                        "starnng@gmail.com",
+                        "yuiiop299@gmail.com"
                     ];
 
                     const userRef = doc(db, "users", currentUser.uid);

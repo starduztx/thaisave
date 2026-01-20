@@ -186,6 +186,52 @@ export default function VictimReportPage() {
 
   const [errors, setErrors] = useState({});
 
+  // Helper: ตรวจสอบความถูกต้องของแต่ละฟิลด์
+  const validateField = (name, value) => {
+    let error = null;
+    if (name === 'description') {
+      if (!value.trim()) error = "กรุณาระบุรายละเอียดสถานการณ์";
+    }
+    if (name === 'contactName') {
+      if (!value.trim()) error = "กรุณาระบุชื่อผู้แจ้ง";
+    }
+    if (name === 'contactPhone') {
+      if (!value) {
+        error = "กรุณาระบุเบอร์ติดต่อ";
+      } else if (!/^[0-9]{10}$/.test(value.replace(/-/g, ''))) {
+        error = "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก";
+      }
+    }
+    return error;
+  };
+
+  // Handle Blur: ตรวจสอบเมื่อออกจากช่องกรอก
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    const error = validateField(name, value);
+    setErrors(prev => ({
+      ...prev,
+      [name]: error ? true : false // เก็บแค่ true/false ตามเดิม หรือเก็บข้อความก็ได้ แต่เดิมใช้ boolean
+    }));
+  };
+
+  // Handle Change wrapper: ลบ error เมื่อเริ่มพิมพ์ถูก
+  const handleChange = (name, value) => {
+    // อัปเดต state หลัก
+    if (name === 'description') setDescription(value);
+    if (name === 'contactName') setContactName(value);
+    if (name === 'contactPhone') setContactPhone(value);
+
+    // เช็คว่ามี error ค้างอยู่ไหม ถ้ามีให้ validate ใหม่เลยเพื่อให้ error หายทันทีที่พิมพ์ถูก
+    if (errors[name]) {
+      const error = validateField(name, value);
+      setErrors(prev => ({
+        ...prev,
+        [name]: error ? true : false
+      }));
+    }
+  };
+
   // 2. Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -343,16 +389,24 @@ export default function VictimReportPage() {
                   <span className="text-red-500 mr-1">*</span>
                   ประเภทภัยพิบัติ
                 </label>
-                <select
-                  value={disasterType}
-                  onChange={(e) => setDisasterType(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                >
-                  <option value="น้ำท่วม (Flood)">น้ำท่วม (Flood)</option>
-                  <option value="ไฟไหม้ (Fire)">ไฟไหม้ (Fire)</option>
-                  <option value="ดินถล่ม (Landslide)">ดินถล่ม (Landslide)</option>
-                  <option value="อื่นๆ (Other)">อื่นๆ (Other)</option>
-                </select>
+                <div className="relative">
+                  <select
+                    value={disasterType}
+                    onChange={(e) => setDisasterType(e.target.value)}
+                    className="w-full p-3 pr-10 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundPosition: "right 0.2cm center",
+                      backgroundRepeat: "no-repeat",
+                      backgroundSize: "1.5em 1.5em"
+                    }}
+                  >
+                    <option value="น้ำท่วม (Flood)">น้ำท่วม (Flood)</option>
+                    <option value="ไฟไหม้ (Fire)">ไฟไหม้ (Fire)</option>
+                    <option value="ดินถล่ม (Landslide)">ดินถล่ม (Landslide)</option>
+                    <option value="อื่นๆ (Other)">อื่นๆ (Other)</option>
+                  </select>
+                </div>
               </div>
 
               {/* Row 2: รายละเอียด */}
@@ -362,13 +416,16 @@ export default function VictimReportPage() {
                   รายละเอียดสถานการณ์ (ระบุเด็ก/คนชรา/ผู้ป่วย)
                 </label>
                 <textarea
+                  name="description"
                   rows="4"
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(e) => handleChange('description', e.target.value)}
+                  onBlur={handleBlur}
                   placeholder="เช่น น้ำท่วมถึงชั้น 2, มีผู้ป่วยติดเตียง 1 คน, เด็ก 2 คน, อาหารหมดแล้ว"
                   className={`w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 ${errors.description ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                   required
                 />
+                {errors.description && <p className="text-red-500 text-sm mt-1">กรุณาระบุรายละเอียดให้ครบถ้วน</p>}
               </div>
 
               {/* Row 2.5: ชื่อผู้ติดต่อ */}
@@ -379,12 +436,15 @@ export default function VictimReportPage() {
                 </label>
                 <input
                   type="text"
+                  name="contactName"
                   value={contactName}
-                  onChange={(e) => setContactName(e.target.value)}
+                  onChange={(e) => handleChange('contactName', e.target.value)}
+                  onBlur={handleBlur}
                   placeholder="ระบุชื่อของคุณ"
                   className={`w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 ${errors.contactName ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                   required
                 />
+                {errors.contactName && <p className="text-red-500 text-sm mt-1">กรุณาระบุชื่อผู้แจ้ง</p>}
               </div>
 
               {/* Row 3: เบอร์ติดต่อ */}
@@ -395,16 +455,18 @@ export default function VictimReportPage() {
                 </label>
                 <input
                   type="tel"
+                  name="contactPhone"
                   value={contactPhone}
                   onChange={(e) => {
-                    // Allow only numbers and limit to 10
                     const val = e.target.value.replace(/[^0-9]/g, '');
-                    if (val.length <= 10) setContactPhone(val);
+                    if (val.length <= 10) handleChange('contactPhone', val);
                   }}
+                  onBlur={handleBlur}
                   placeholder="081-xxx-xxxx"
                   className={`w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 ${errors.contactPhone ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                   required
                 />
+                {errors.contactPhone && <p className="text-red-500 text-sm mt-1">กรุณาระบุเบอร์โทรศัพท์ 10 หลัก (ตัวเลขเท่านั้น)</p>}
               </div>
 
               {/* Row 3: พิกัด GPS */}

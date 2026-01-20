@@ -1,28 +1,26 @@
 "use client";
 // File: src/app/rescue/page.js
-// หน้าที่: Dashboard กู้ภัย (ปรับ Logic ปุ่ม Action ใหม่ + Location Permission)
+// หน้าที่: Dashboard กู้ภัย (อัปเดต: แจ้งเตือนเคสใหม่ + ป้องกันแย่งงาน)
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react'; // ✅ เพิ่ม useRef
 import { db } from '../../lib/db';
-import { collection, query, orderBy, onSnapshot, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, serverTimestamp, runTransaction } from "firebase/firestore"; // ✅ เพิ่ม runTransaction
 import Link from 'next/link';
-import { MapPin, CheckCircle, Image as ImageIcon, X, Truck, Menu, ClipboardList, Loader2 } from 'lucide-react';
+import { MapPin, CheckCircle, Image as ImageIcon, X, Truck, ClipboardList, Loader2, Bell, Lock } from 'lucide-react'; // ✅ เพิ่ม Icon
 import Navbar from '../../components/Navbar';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 
-// --- UTILITY: แยกข้อความ Description (เอาไว้โชว์แค่ข้อความหลัก) ---
-// --- UTILITY: แยกข้อความ Description (เอาไว้โชว์แค่ข้อความหลัก) ---
+// --- UTILITY: แยกข้อความ Description ---
 const parseReportData = (fullDescription) => {
   if (!fullDescription) return { cleanDesc: "" };
-  // ตัดส่วนที่เป็น Chat log ออก เพื่อแสดงแค่รายละเอียดตั้งต้น
   const cleanDesc = fullDescription.split('\n\n💬')[0];
   return { cleanDesc };
 };
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return null;
-  const R = 6371; // km
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -32,20 +30,16 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return (R * c).toFixed(1);
 };
 
-// --- SUB-COMPONENT: ปุ่มจัดการสถานะ (ปรับ Logic ตามโจทย์ + Gatekeeping) ---
+// --- SUB-COMPONENT: ปุ่มจัดการสถานะ (✅ อัปเดต: Transaction & Lock) ---
 function StatusActionButton({ report, user, isLocationEnabled, onRequestLocation }) {
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleAcceptCase = async () => {
     if (!user) { alert("รอโหลดข้อมูลผู้ใช้..."); return; }
-
     if (!confirm("ยืนยันที่จะ 'รับเคสนี้' ?")) return;
 
-    // Gatekeeping logic for accepting cases
     const isAdmin = user && user.role === 'center';
     if (!isLocationEnabled && !isAdmin) {
-      // Trigger the location request modal again
       onRequestLocation();
       return;
     }
@@ -55,22 +49,47 @@ function StatusActionButton({ report, user, isLocationEnabled, onRequestLocation
       const reportRef = doc(db, "reports", report.id);
       const rescuerName = user.name || user.displayName || user.email || 'จนท.กู้ภัย';
 
-      await updateDoc(reportRef, {
-        status: 'accepted',
-        responderId: user.uid,
-        responderName: rescuerName,
-        acceptedAt: new Date(),
-        lastUpdated: serverTimestamp()
+      // ✅ ใช้ Transaction ป้องกัน Race Condition (แย่งกันกด)
+      await runTransaction(db, async (transaction) => {
+        const sfDoc = await transaction.get(reportRef);
+        if (!sfDoc.exists()) throw "ไม่พบข้อมูลเคสนี้";
+
+        const data = sfDoc.data();
+        // เช็คว่าสถานะเปลี่ยนไปหรือยัง (โดนคนอื่นรับไปแล้ว?)
+        if (data.status !== 'pending' && data.status !== 'investigating') {
+          throw "⚠️ เคสนี้ถูกรับงานไปแล้วโดยทีมอื่น!";
+        }
+
+        // ถ้ายังว่างอยู่ ให้ทำการอัปเดต
+        transaction.update(reportRef, {
+          status: 'accepted',
+          responderId: user.uid,
+          responderName: rescuerName,
+          acceptedAt: new Date(),
+          lastUpdated: serverTimestamp()
+        });
       });
-      // รับงานเสร็จ ไม่ต้องทำอะไร UI จะเปลี่ยนเป็นปุ่มจัดการเคสเอง
+
     } catch (error) {
-      alert("Error: " + error.message);
+      // ถ้าแย่งกดไม่ทัน ให้แจ้งเตือนผู้ใช้
+      alert(error.message || error);
     } finally {
       setLoading(false);
     }
   };
 
-  // 1. เคสใหม่ -> ปุ่มรับงาน (กดแล้วอัปเดต DB ทันที)
+  // 1. เช็คก่อนเลยว่า "โดนคนอื่นรับไปแล้วหรือยัง" (ไม่ใช่เรา และ สถานะไม่ใช่ของใหม่)
+  const isTakenByOthers = (report.status === 'accepted' || report.status === 'traveling' || report.status === 'completed') && report.responderId !== user.uid;
+
+  if (isTakenByOthers) {
+    return (
+      <button disabled className="w-full h-full bg-gray-100 text-gray-500 py-2.5 rounded-lg font-medium border border-gray-200 cursor-not-allowed text-sm flex items-center justify-center gap-2">
+        <Lock size={16} /> รับเคสโดย {report.responderName || 'ทีมอื่น'}
+      </button>
+    );
+  }
+
+  // 2. เคสใหม่ -> ปุ่มรับงาน
   if (report.status === 'pending' || report.status === 'investigating') {
     return (
       <button
@@ -84,28 +103,25 @@ function StatusActionButton({ report, user, isLocationEnabled, onRequestLocation
     );
   }
 
-  // 2. รับงานแล้ว หรือ กำลังเดินทาง -> ปุ่มไปหน้าจัดการ (Link ไปหน้า Detail)
-  if (report.status === 'accepted' || report.status === 'traveling') {
+  // 3. รับงานแล้ว (โดยเราเอง) -> ปุ่มไปหน้าจัดการ
+  if ((report.status === 'accepted' || report.status === 'traveling') && report.responderId === user.uid) {
     return (
       <Link
         href={`/rescue/status?id=${report.id}`}
-        // ✅ เพิ่ม class 'relative' เพื่อให้เป็นจุดอ้างอิงของ Badge
         className="relative w-full h-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-medium shadow-sm transition-colors text-sm flex items-center justify-center gap-2"
       >
-        {/* 🔔 ส่วนแจ้งเตือน: แสดงเมื่อมีข้อความที่ยังไม่อ่าน */}
         {report.unreadForRescuer > 0 && (
           <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1 flex items-center justify-center rounded-full border-2 border-white shadow-md z-10 animate-bounce">
             {report.unreadForRescuer}
           </span>
         )}
-
         <ClipboardList size={18} />
         จัดการเคส
       </Link>
     );
   }
 
-  // 3. เสร็จสิ้น -> ปุ่มสถานะจบ (กดไม่ได้)
+  // 4. เสร็จสิ้น (โดยเรา)
   if (report.status === 'completed') {
     return (
       <button disabled className="w-full h-full bg-gray-100 text-gray-400 py-2.5 rounded-lg font-medium border border-gray-200 cursor-not-allowed text-sm flex items-center justify-center gap-2">
@@ -116,7 +132,7 @@ function StatusActionButton({ report, user, isLocationEnabled, onRequestLocation
   return null;
 }
 
-// --- SUB-COMPONENT: Location Permission Modal (From Old Code) ---
+// --- SUB-COMPONENT: Location Modal ---
 function LocationPermissionModal({ onEnable, onSkip }) {
   const [loading, setLoading] = useState(false);
 
@@ -127,56 +143,21 @@ function LocationPermissionModal({ onEnable, onSkip }) {
       setLoading(false);
       return;
     }
-
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLoading(false);
-        onEnable(position);
-      },
-      (error) => {
-        setLoading(false);
-        console.error("Location error:", error);
-        alert("ไม่สามารถระบุตำแหน่งได้: " + error.message);
-      }
+      (position) => { setLoading(false); onEnable(position); },
+      (error) => { setLoading(false); alert("ไม่สามารถระบุตำแหน่งได้: " + error.message); }
     );
   };
 
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onSkip}>
       <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-8 flex flex-col items-center text-center animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-6">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="80"
-            height="80"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-[#B91C1C]"
-          >
-            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" fill="#B91C1C" stroke="none" />
-            <circle cx="12" cy="10" r="2" fill="white" stroke="none" />
-          </svg>
-        </div>
-
+        <div className="mb-6"><MapPin size={60} className="text-[#B91C1C]" /></div>
         <h3 className="text-xl font-bold text-gray-900 mb-4">ระบุตำแหน่งของคุณ</h3>
-        <p className="text-gray-600 mb-8 leading-relaxed">
-          ให้เปิดตำแหน่งของคุณ<br />ขณะใช้งานหรือไม่?
-        </p>
-
-        <div className="flex flex-col gap-3 w-full">
-          <button
-            onClick={handleEnable}
-            disabled={loading}
-            className="w-full bg-[#34A853] hover:bg-[#2d9249] text-white font-bold py-3.5 rounded-full shadow-sm transition-transform active:scale-95 disabled:opacity-70 disabled:active:scale-100 flex justify-center items-center gap-2"
-          >
-            {loading && <Loader2 className="animate-spin" size={20} />}
-            เปิดตำแหน่ง
-          </button>
-        </div>
+        <p className="text-gray-600 mb-8 leading-relaxed">ให้เปิดตำแหน่งของคุณ<br />ขณะใช้งานหรือไม่?</p>
+        <button onClick={handleEnable} disabled={loading} className="w-full bg-[#34A853] hover:bg-[#2d9249] text-white font-bold py-3.5 rounded-full shadow-sm flex justify-center items-center gap-2">
+          {loading && <Loader2 className="animate-spin" size={20} />} เปิดตำแหน่ง
+        </button>
       </div>
     </div>
   );
@@ -187,24 +168,31 @@ export default function RescueDashboard() {
   const [viewingImage, setViewingImage] = useState(null);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { user, logout, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Location States (Merged)
+  // Location States
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [isLocationEnabled, setIsLocationEnabled] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
 
-  // Initial Location Check logic
-  useEffect(() => {
-    if (!user || user.role === 'center') return; // Skip for admins or if no user yet
+  // Notification States
+  const [toast, setToast] = useState(null); // { message, type }
+  const audioRef = useRef(null); // สำหรับเล่นเสียง
+  const isFirstLoad = useRef(true); // ป้องกันเสียงดังตอนโหลดหน้าเว็บครั้งแรก
 
-    // Show modal once data is loaded and we are on the page, IF NOT already enabled
+  useEffect(() => {
+    // โหลดเสียงเตรียมไว้
+    audioRef.current = new Audio('/alert.mp3');
+  }, []);
+
+  // Location Check
+  useEffect(() => {
+    if (!user || user.role === 'center') return;
     const timer = setTimeout(() => {
       const savedLocationState = localStorage.getItem('rescue_location_enabled');
       if (savedLocationState === 'true') {
         setIsLocationEnabled(true);
-        // Fetch location immediately if enabled
         navigator.geolocation.getCurrentPosition(
           (position) => setUserLocation(position),
           (error) => console.error("Auto-location error:", error)
@@ -223,12 +211,9 @@ export default function RescueDashboard() {
     localStorage.setItem('rescue_location_enabled', 'true');
   };
 
-  const handleLocationSkip = () => {
-    setIsLocationEnabled(false);
-    setShowLocationModal(false);
-  };
+  const handleLocationSkip = () => { setIsLocationEnabled(false); setShowLocationModal(false); };
 
-  // Guard: Protect Rescue Page
+  // Guard
   useEffect(() => {
     if (authLoading) return;
     if (user) {
@@ -239,15 +224,40 @@ export default function RescueDashboard() {
     }
   }, [user, authLoading, router]);
 
-  const handleLogout = async () => { try { await logout(); window.location.href = '/login'; } catch (error) { console.error("Logout failed", error); } };
-
   const [stats, setStats] = useState({ new: 0, accepted: 0, completed: 0, total: 0 });
 
+  // Real-time Data & Alert Logic
   useEffect(() => {
     if (!db) return;
     const q = query(collection(db, "reports"), orderBy("timestamp", "desc"));
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), timestamp: doc.data().timestamp?.toDate() }));
+
+      // ✅ Logic แจ้งเตือนเคสใหม่
+      if (!isFirstLoad.current) {
+        // ถ้าจำนวนเคสเพิ่มขึ้น แสดงว่ามีเคสใหม่ (วิธีง่ายๆ แต่ได้ผล)
+        if (items.length > reports.length) {
+          // เล่นเสียง (แบบจำกัดเวลา 3 วินาที)
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0; // 1. รีเซ็ตให้เริ่มเล่นจากวินาทีที่ 0 เสมอ
+            audioRef.current.play().catch(e => console.log("Audio permission denied"));
+            setTimeout(() => {
+              if (audioRef.current) {
+                audioRef.current.pause();       // หยุดเล่น
+                audioRef.current.currentTime = 0; // กรอเทปกลับไปจุดเริ่มต้นเตรียมไว้รอบหน้า
+              }
+            }, 2000); // 2000 = 2 วิ, 5000 = 5 วิ
+          }
+          // แสดง Toast notification
+          setToast({ message: "🚨 มีการแจ้งเหตุเข้ามาใหม่!", type: "alert" });
+          // ซ่อน Toast อัตโนมัติ
+          setTimeout(() => setToast(null), 5000);
+        }
+      } else {
+        isFirstLoad.current = false;
+      }
+
       setReports(items);
       setStats({
         new: items.filter(i => i.status === 'pending' || i.status === 'investigating').length,
@@ -258,7 +268,7 @@ export default function RescueDashboard() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [reports.length]); // dependency reports.length เพื่อเทียบของเก่ากับใหม่
 
   const timeAgo = (date) => {
     if (!date) return "";
@@ -272,8 +282,20 @@ export default function RescueDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F0F2F5] font-sans">
+    <div className="min-h-screen bg-[#F0F2F5] font-sans relative">
       <Navbar activePage="rescue" />
+
+      {/* ✅ Toast Notification */}
+      {toast && (
+        <div className="fixed top-24 right-4 z-[100] bg-red-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-right duration-300">
+          <div className="bg-white/20 p-2 rounded-full"><Bell className="animate-wiggle" /></div>
+          <div>
+            <h4 className="font-bold">แจ้งเตือนด่วน</h4>
+            <p className="text-sm">{toast.message}</p>
+          </div>
+          <button onClick={() => setToast(null)} className="ml-2 hover:bg-white/20 p-1 rounded"><X size={16} /></button>
+        </div>
+      )}
 
       <div className="container mx-auto p-6 max-w-7xl">
         <div className="flex justify-between items-end mb-6">
@@ -293,14 +315,18 @@ export default function RescueDashboard() {
         <div className="space-y-4">
           {loading ? <div className="text-center py-20"><Loader2 className="animate-spin mx-auto text-blue-600" /></div> :
             reports.length === 0 ? <div className="text-center py-20 text-gray-500">ไม่มีรายการแจ้งเหตุ</div> : (
-              reports.map((item) => {
+              reports.map((item, index) => {
                 const { cleanDesc } = parseReportData(item.description);
+                // เช็คว่าเป็นเคสใหม่มากๆ หรือไม่ (เช่น เพิ่งมาเมื่อกี้นี้) เพื่อใส่ Effect
+                const isNewArrival = index === 0 && (new Date() - item.timestamp) < 60000; // น้อยกว่า 1 นาที
+
                 return (
-                  <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-all">
+                  <div key={item.id} className={`bg-white rounded-xl shadow-sm border overflow-hidden hover:shadow-md transition-all ${isNewArrival ? 'border-red-400 ring-2 ring-red-100' : 'border-gray-200'}`}>
                     <div className="p-6">
                       {/* HEADER */}
                       <div className="flex justify-between items-start mb-4">
                         <div className="flex flex-wrap items-center gap-1">
+                          {isNewArrival && <span className="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase animate-pulse">NEW</span>}
                           {item.status === 'pending' && <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">วิกฤต/รอการช่วยเหลือ</span>}
                           {item.status === 'investigating' && <span className="bg-yellow-100 text-yellow-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">กำลังตรวจสอบ</span>}
                           {item.status === 'accepted' && <span className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">รับเคสแล้ว</span>}
@@ -331,9 +357,8 @@ export default function RescueDashboard() {
                         </div>
                       </div>
 
-                      {/* FOOTER ACTIONS - ปรับลดเหลือ 3 ปุ่มหลัก */}
+                      {/* FOOTER ACTIONS */}
                       <div className="flex flex-col md:flex-row gap-3 pt-4 border-t border-gray-100">
-                        {/* 1. ปุ่มดูรูป */}
                         {item.imageUrl ? (
                           <button onClick={() => setViewingImage(item.imageUrl)} className="flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 py-2.5 rounded-lg font-medium transition-colors shadow-sm text-sm">
                             <ImageIcon size={18} /> ดูหลักฐาน
@@ -344,13 +369,11 @@ export default function RescueDashboard() {
                           </button>
                         )}
 
-                        {/* 2. ปุ่มดูแผนที่ */}
                         <a href={`https://www.google.com/maps/search/?api=1&query=${item.latitude},${item.longitude}`} target="_blank" rel="noreferrer"
                           className="flex-1 flex items-center justify-center gap-2 bg-slate-600 hover:bg-slate-700 text-white py-2.5 rounded-lg font-medium transition-colors shadow-sm text-sm">
                           <MapPin size={18} /> ดูแผนที่
                         </a>
 
-                        {/* 3. ปุ่ม Action หลัก (เปลี่ยนตามสถานะ) */}
                         <div className="flex-1 h-full">
                           <StatusActionButton
                             report={item}
@@ -376,12 +399,8 @@ export default function RescueDashboard() {
         </div>
       )}
 
-      {/* Location Modal (Rendered here) */}
       {showLocationModal && (
-        <LocationPermissionModal
-          onEnable={handleLocationEnable}
-          onSkip={handleLocationSkip}
-        />
+        <LocationPermissionModal onEnable={handleLocationEnable} onSkip={handleLocationSkip} />
       )}
     </div>
   );
