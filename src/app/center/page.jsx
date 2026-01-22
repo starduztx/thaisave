@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   MapPin, Phone, Clock, Search, Filter, AlertTriangle,
-  CheckCircle, ChevronDown, BarChart2, Activity, Shield
+  CheckCircle, ChevronDown, BarChart2, Activity, Shield, Volume2, VolumeX
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/db';
@@ -52,11 +52,34 @@ export default function CenterDashboardPage() {
   const [showCaseList, setShowCaseList] = useState(true);
 
   // Sound Refs
+  // Sound Refs
   const audioRef = useRef(null);
   const isFirstLoad = useRef(true);
 
   useEffect(() => {
-    audioRef.current = new Audio('/alert.mp3');
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+    audioRef.current = new Audio(`${basePath}/alert.mp3`);
+
+    // ✅ Silent Unlock Strategy: ปลดล็อคเสียงทันทีที่ผู้ใช้คลิกตรงไหนก็ได้ในหน้าเว็บ
+    const unlockAudio = () => {
+      if (audioRef.current) {
+        audioRef.current.play().then(() => {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }).catch(() => { });
+        // ลบ Listener ออกทันทีที่ทำสำเร็จ (ทำแค่ครั้งเดียว)
+        document.removeEventListener('click', unlockAudio);
+        document.removeEventListener('keydown', unlockAudio);
+      }
+    };
+
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('keydown', unlockAudio);
+
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('keydown', unlockAudio);
+    };
   }, []);
 
   // ดึงข้อมูล Realtime
@@ -74,9 +97,11 @@ export default function CenterDashboardPage() {
 
         const hasNew = changes.some(change => change.type === 'added');
 
+        // ✅ Play sound directly
         if (hasNew && audioRef.current) {
+          console.log("🔊 Playing notification sound!");
           audioRef.current.currentTime = 0;
-          audioRef.current.play().catch(e => console.log("Audio play failed", e));
+          audioRef.current.play().catch(e => console.error("Audio play failed (waiting for interaction)", e));
         }
       } else {
         isFirstLoad.current = false;
@@ -143,7 +168,8 @@ export default function CenterDashboardPage() {
             ภาพรวมเคส <span className="text-sm font-normal text-gray-500">({filteredReports.length})</span>
           </h2>
 
-          <div className="flex gap-3 w-full md:w-auto">
+          <div className="flex gap-3 w-full md:w-auto items-center">
+
             <div className="relative flex-grow md:flex-grow-0">
               <select
                 value={filterType}
