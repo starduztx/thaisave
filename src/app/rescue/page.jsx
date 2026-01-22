@@ -183,7 +183,8 @@ export default function RescueDashboard() {
 
   useEffect(() => {
     // โหลดเสียงเตรียมไว้
-    audioRef.current = new Audio('/alert.mp3');
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+    audioRef.current = new Audio(`${basePath}/alert.mp3`);
   }, []);
 
   // Location Check
