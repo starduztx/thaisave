@@ -11,7 +11,7 @@ const nextConfig = {
       },
     ],
   },
-  basePath: process.env.NEXT_PUBLIC_BASE_PATH || '', // ✅ ใช้ Base Path จาก ENV
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH || '', 
 };
 
 module.exports = nextConfig;
